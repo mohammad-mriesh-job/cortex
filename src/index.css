@@ -1,0 +1,20 @@
+:root {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+}
+
+/* Smooth in-page anchor scrolling for the table of contents */
+html {
+  scroll-behavior: smooth;
+}
