@@ -2,6 +2,7 @@ import { lazy } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { Layout } from './components/layout/Layout';
 import { ScrollToTop } from './components/ScrollToTop';
+import { KeyboardScroll } from './components/KeyboardScroll';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { ACTIVE_TRACK_STORAGE_KEY, DEFAULT_TRACK_SLUG, trackBySlug } from './modules/registry';
 
@@ -29,6 +30,7 @@ export default function App() {
   return (
     <>
       <ScrollToTop />
+      <KeyboardScroll />
       <Routes>
         <Route path="/" element={<RootRedirect />} />
         <Route path="/:trackSlug" element={<Layout />}>

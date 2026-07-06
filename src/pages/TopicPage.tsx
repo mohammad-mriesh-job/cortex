@@ -110,6 +110,15 @@ export function TopicPage() {
           ) : (
             <Box sx={{ flex: 1 }} />
           )}
+          <Button
+            onClick={() => toggle(key)}
+            variant={done ? 'contained' : 'outlined'}
+            color={done ? 'success' : 'primary'}
+            startIcon={done ? <CheckCircleIcon /> : <RadioButtonUncheckedIcon />}
+            sx={{ textTransform: 'none', flexShrink: 0, alignSelf: { sm: 'center' } }}
+          >
+            {done ? 'Completed' : 'Mark complete'}
+          </Button>
           {adjacent.next ? (
             <Button
               component={RouterLink}
