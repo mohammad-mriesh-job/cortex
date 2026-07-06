@@ -30,7 +30,10 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        # npm install (not ci): the rolldown/vite native toolchain carries
+        # platform-specific optional deps, so a lockfile generated on one
+        # OS/npm version trips `npm ci`'s strict sync check on the CI runner.
+        run: npm install --no-audit --no-fund
 
       - name: Build
         run: npm run build
