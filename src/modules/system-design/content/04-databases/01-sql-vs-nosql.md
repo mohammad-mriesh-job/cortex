@@ -31,13 +31,13 @@ The relational database is the **default choice**. It gives you joins, transacti
 
 ```mermaid
 flowchart TD
-  Start["What does the workload need?"] --> Q1{"Complex relationships<br/>+ multi-row ACID?"}
-  Q1 -->|Yes| SQL["Relational (SQL)<br/>Postgres / MySQL"]
-  Q1 -->|No| Q2{"What is the<br/>dominant access pattern?"}
-  Q2 -->|"Lookup by single key"| KV["Key-Value<br/>Redis / DynamoDB"]
-  Q2 -->|"Self-contained records,<br/>flexible fields"| DOC["Document<br/>MongoDB"]
-  Q2 -->|"Huge writes, queries<br/>over wide rows"| WC["Wide-Column<br/>Cassandra"]
-  Q2 -->|"Traverse connections<br/>between entities"| GR["Graph<br/>Neo4j"]
+  Start["What does the workload need?"] --> Q1{"Complex relationships + multi-row ACID?"}
+  Q1 -->|Yes| SQL["Relational (SQL) — Postgres / MySQL"]
+  Q1 -->|No| Q2{"What is the dominant access pattern?"}
+  Q2 -->|"Lookup by single key"| KV["Key-Value — Redis / DynamoDB"]
+  Q2 -->|"Self-contained flexible records"| DOC["Document — MongoDB"]
+  Q2 -->|"Huge writes, wide rows"| WC["Wide-Column — Cassandra"]
+  Q2 -->|"Traverse connections"| GR["Graph — Neo4j"]
 ```
 
 ## 3. The four NoSQL families
@@ -102,10 +102,10 @@ Mature systems rarely pick one. A single product often uses **several** stores, 
 
 ```mermaid
 flowchart LR
-  App[Application] --> PG[("Postgres<br/>orders + payments")]
-  App --> RD[("Redis<br/>sessions + cache")]
-  App --> ES[("Elasticsearch<br/>full-text search")]
-  App --> CS[("Cassandra<br/>activity feed")]
+  App[Application] -->|"orders, payments — ACID"| PG[(Postgres)]
+  App -->|"sessions, cache — speed"| RD[(Redis)]
+  App -->|"full-text search"| ES[(Elasticsearch)]
+  App -->|"activity feed — write scale"| CS[(Cassandra)]
 ```
 
 This is **polyglot persistence** — orders need ACID (Postgres), sessions need speed (Redis), search needs an inverted index (Elasticsearch), the feed needs write scale (Cassandra). Saying this in an interview signals maturity.

@@ -51,6 +51,16 @@ list.removeIf(String::isBlank);   // safe, concise, O(n)
 Fail-fast is **best-effort, not a guarantee** — never write logic that *depends* on catching a CME. It's a debugging aid for spotting bugs, not a concurrency control mechanism. For genuine concurrent iteration, use **fail-safe** collections: `CopyOnWriteArrayList` or `ConcurrentHashMap`, whose iterators are weakly consistent and never throw CME.
 :::
 
+What the iterator does at each step decides whether you get a clean pass or a CME:
+
+```mermaid
+flowchart TD
+    A["Iterate a fail-fast collection"] --> B{"Modify during the loop?"}
+    B -->|"No modification"| C["Completes normally"]
+    B -->|"it.remove() / removeIf()"| D["Safe — modCount stays in sync with the iterator"]
+    B -->|"collection.add() / remove()"| E["next() throws ConcurrentModificationException"]
+```
+
 ## Comparable — natural ordering
 
 A class implements **`Comparable<T>`** to declare its single, intrinsic *natural ordering* via `compareTo`, which returns a negative number, zero, or a positive number:
@@ -93,6 +103,34 @@ Comparator.comparing(Person::name,
 | Method | `compareTo(T)` | `compare(T, T)` |
 | Orderings per type | one (natural) | many |
 | Sort call | `list.sort(null)` | `list.sort(cmp)` |
+
+## Check yourself
+
+```quiz
+title: Iteration & ordering
+questions:
+  - q: 'What is the correct way to remove elements while iterating a non-concurrent `List`?'
+    options:
+      - text: '`it.remove()` via an explicit `Iterator`, or `list.removeIf(pred)`'
+        correct: true
+      - '`list.remove(x)` inside an enhanced-for loop'
+      - 'Wrap the loop in `try/catch (ConcurrentModificationException)`'
+    explain: 'Structurally modifying the collection directly during iteration bumps `modCount`, so the next `next()` throws `ConcurrentModificationException`. Only `Iterator.remove()` (or the declarative `removeIf`) keeps the iterator in sync.'
+  - q: 'Can you rely on catching `ConcurrentModificationException` to detect concurrent modification?'
+    options:
+      - text: 'No — fail-fast is best-effort, a debugging aid, not a guarantee'
+        correct: true
+      - 'Yes, it is thrown deterministically on every concurrent modification'
+      - 'Yes, but only for `ArrayList`'
+    explain: 'Fail-fast checks `modCount` on a best-effort basis and may miss some modifications, so never build logic around catching a CME. For genuine concurrent iteration use fail-safe collections like `CopyOnWriteArrayList` or `ConcurrentHashMap`.'
+  - q: 'Why is `return a - b;` a buggy `compareTo` for `int` fields?'
+    options:
+      - text: 'Subtraction can **overflow** for large or negative values and return the wrong sign'
+        correct: true
+      - 'It is merely slower than `Integer.compare`'
+      - 'It returns a `long`, not an `int`'
+    explain: 'For instance `Integer.MIN_VALUE - 1` overflows and flips sign, silently corrupting the order. Always use `Integer.compare(a, b)` (and `Long.compare`, `Double.compare`).'
+```
 
 :::key
 Modify a collection mid-loop only through `it.remove()` or `removeIf` — direct mutation throws `ConcurrentModificationException`. Use **`Comparable`** for a type's one natural order and **`Comparator`** (with `comparing`/`thenComparing`/`reversed`) for everything else. Compare with `Integer.compare`, never subtraction.

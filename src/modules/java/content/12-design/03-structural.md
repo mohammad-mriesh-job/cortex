@@ -155,6 +155,34 @@ class Directory implements FsNode {               // composite
 Adapter, Decorator, and Proxy all *wrap* an object, which makes them easy to confuse — distinguish them by intent: **Adapter changes the interface**, **Decorator adds behaviour behind the same interface**, **Proxy controls access behind the same interface**. If you find yourself asking "is this a decorator or a proxy?", ask "am I adding capability, or gating access?"
 :::
 
+## Check yourself
+
+```quiz
+title: Structural patterns
+questions:
+  - q: 'Adapter, Decorator, and Proxy all wrap an object. What separates a **Decorator** from a **Proxy**?'
+    options:
+      - text: 'Decorator **adds behaviour** behind the same interface; Proxy **controls access** behind the same interface'
+        correct: true
+      - 'Decorator changes the interface; Proxy keeps it'
+      - 'Proxy adds behaviour; Decorator changes the type'
+    explain: 'Both keep the same interface. The intent differs: a decorator layers new capability (buffering, cost); a proxy gates access (lazy loading, security, remoting). Adapter is the odd one out — it *changes* the interface.'
+  - q: 'What pattern does `new BufferedInputStream(new FileInputStream(f))` illustrate?'
+    options:
+      - text: 'Decorator — each stream wraps another of the same type, adding behaviour'
+        correct: true
+      - 'Adapter — it converts bytes to characters'
+      - 'Factory — it builds streams'
+    explain: '`java.io` is the canonical Decorator: every wrapper *is* an `InputStream` and adds a responsibility (buffering, decompression). `InputStreamReader`, converting bytes to chars, is the Adapter.'
+  - q: 'With Spring''s proxy-based AOP, why might `@Transactional` silently not apply?'
+    options:
+      - text: 'A bean calling its own method (`this.method()`) bypasses the proxy — the advice never runs'
+        correct: true
+      - 'Proxies only work on `final` classes'
+      - '`@Transactional` requires CGLIB, which Spring never uses'
+    explain: 'The advice lives on the proxy wrapping the bean, so internal self-invocation goes straight to the target instance and skips it. JDK dynamic proxies also only proxy interfaces; concrete classes need CGLIB/ByteBuddy.'
+```
+
 :::key
 Structural patterns compose objects. **Adapter** translates interfaces; **Decorator** layers behaviour (see `java.io`); **Proxy** controls access (static or dynamic via `java.lang.reflect.Proxy`); **Facade** simplifies a subsystem; **Composite** unifies leaves and trees. Several wrap — the difference is always intent.
 :::

@@ -24,6 +24,39 @@ String today() {
 
 `SimpleDateFormat` is famously **not thread-safe**; a `ThreadLocal` gives each thread a private one instead of synchronizing a shared instance.
 
+:::note
+`SimpleDateFormat` is the classic teaching example, but the modern fix is **immutability, not
+confinement**: `java.time.DateTimeFormatter` is immutable and freely shareable across threads — no
+`ThreadLocal` needed. Reach for confinement only when a mutable, non-thread-safe object genuinely
+must be reused per thread.
+:::
+
+## How it is wired under the hood
+
+The values do not live inside the `ThreadLocal` — they live in a `ThreadLocalMap` **owned by each
+Thread**. The shared `ThreadLocal` object is only the *key*:
+
+```mermaid
+flowchart TD
+  K["static ThreadLocal FORMAT — the shared key"]
+  subgraph TA["Thread A"]
+    MA["threadLocals: ThreadLocalMap"] --> VA["formatter instance A"]
+  end
+  subgraph TB["Thread B"]
+    MB["threadLocals: ThreadLocalMap"] --> VB["formatter instance B"]
+  end
+  K -.->|"weak key into"| MA
+  K -.->|"weak key into"| MB
+```
+
+`get()` reads `Thread.currentThread().threadLocals` and probes that map with the `ThreadLocal` as
+key — an open-addressed table with **weak keys and strong values**. Because a thread only ever
+touches *its own* map, there is no lock and no contention anywhere on this path; a `get()` costs a
+few nanoseconds regardless of thread count. The weak key also explains the leak's exact shape: if
+the `ThreadLocal` itself becomes unreachable, its key entry can be collected, but the **value stays
+strongly referenced by the live thread** until the map happens to expunge the stale slot on a later
+probe — which may be never on an idle pooled worker.
+
 ## Where it earns its keep
 
 | Use | Why ThreadLocal |

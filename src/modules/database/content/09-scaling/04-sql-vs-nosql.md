@@ -96,16 +96,13 @@ tabs:
 
 ```mermaid
 flowchart TD
-    Q1{"Do you need multi-row ACID<br/>transactions or complex ad-hoc queries?"}
-    Q1 -->|Yes| REL["Relational (Postgres, MySQL)<br/>— reach for this by DEFAULT"]
-    Q1 -->|No| Q2{"What is the dominant<br/>access pattern?"}
-    Q2 -->|"Look up by a single key"| KV["Key-Value<br/>(Redis, DynamoDB)"]
-    Q2 -->|"Fetch whole self-contained objects"| DOC["Document<br/>(MongoDB)"]
-    Q2 -->|"Enormous write volume /<br/>time-series by key"| WC["Wide-Column<br/>(Cassandra)"]
-    Q2 -->|"Traverse relationships<br/>many hops deep"| GR["Graph<br/>(Neo4j)"]
-    style REL fill:#d5f5e3,color:#000
-    style Q1 fill:#f8981d,color:#000
-    style Q2 fill:#f8981d,color:#000
+    Q1{"Need multi-row ACID transactions or complex ad-hoc queries?"}
+    Q1 -->|Yes| REL["Relational (Postgres, MySQL) — the DEFAULT"]
+    Q1 -->|No| Q2{"What is the dominant access pattern?"}
+    Q2 -->|"look up by a single key"| KV["Key-Value (Redis, DynamoDB)"]
+    Q2 -->|"fetch whole self-contained objects"| DOC["Document (MongoDB)"]
+    Q2 -->|"enormous write volume, time-series by key"| WC["Wide-Column (Cassandra)"]
+    Q2 -->|"traverse relationships many hops deep"| GR["Graph (Neo4j)"]
 ```
 
 :::senior

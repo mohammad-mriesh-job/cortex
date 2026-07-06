@@ -271,6 +271,282 @@ for (int i = 0; i < n; i++) {
 
 **O(n):** each index enters and leaves the deque once. This beats a size-k heap's O(n log k) and is the canonical monotonic-queue problem.`,
   },
+  {
+    id: 'dsa-sq-when-heap-vs-sort',
+    question: 'When should you use a heap instead of just sorting?',
+    difficulty: 'Easy',
+    category: 'Stacks & Queues',
+    tags: ['heap', 'priority queue', 'strategy'],
+    answer: `Reach for a **heap** when you need repeated access to the current min/max but **not a fully sorted order** — especially on a **stream** where all the data isn't available at once.
+
+| Situation | Heap | Sorting |
+|--|--|--|
+| Top-k of n (k ≪ n) | **O(n log k)** | O(n log n) |
+| Streaming / online data | **works incrementally** | needs all data |
+| Need the whole order | O(n log n) to drain | **O(n log n)** |
+| Repeated insert + extract-min | **O(log n) each** | re-sort each time |
+
+:::tip
+Cue phrases: "**k largest/smallest**", "**merge k sorted**", "**median so far**", "**next task by priority**". If you only need a partial or evolving order, a heap beats sorting.
+:::`,
+  },
+  {
+    id: 'dsa-sq-pq-comparator',
+    question: 'How do you make a max-heap or a heap of custom objects in Java?',
+    difficulty: 'Easy',
+    category: 'Stacks & Queues',
+    tags: ['priority queue', 'comparator', 'java'],
+    answer: `Java's \`PriorityQueue\` is a **min-heap** by default. Pass a **comparator** to reverse it or to order custom objects.
+
+\`\`\`java
+// max-heap of integers
+PriorityQueue<Integer> max = new PriorityQueue<>(Collections.reverseOrder());
+
+// heap of int[] {node, dist} ordered by dist (Dijkstra)
+PriorityQueue<int[]> pq = new PriorityQueue<>((a, b) -> a[1] - b[1]);
+
+// heap of tasks by priority then name
+PriorityQueue<Task> tasks = new PriorityQueue<>(
+    Comparator.comparingInt((Task t) -> t.priority).thenComparing(t -> t.name));
+\`\`\`
+
+:::gotcha
+For comparators, prefer \`Integer.compare(a, b)\` over \`a - b\` — the subtraction can **overflow** for large or negative values and corrupt the ordering. The overflow-safe form matters exactly when you least expect it.
+:::`,
+  },
+  {
+    id: 'dsa-sq-min-stack',
+    question: 'Design a stack that supports push, pop, top, and getMin all in O(1).',
+    difficulty: 'Medium',
+    category: 'Stacks & Queues',
+    tags: ['stack', 'design', 'min-stack'],
+    answer: `Keep an **auxiliary stack of running minimums** in lockstep with the main stack. Its top is always the minimum of the current contents.
+
+\`\`\`java
+Deque<Integer> stack = new ArrayDeque<>();
+Deque<Integer> mins  = new ArrayDeque<>();
+
+void push(int x) {
+  stack.push(x);
+  mins.push(mins.isEmpty() ? x : Math.min(x, mins.peek()));
+}
+void pop()      { stack.pop(); mins.pop(); }
+int  getMin()   { return mins.peek(); }
+\`\`\`
+
+Every push records "the min if this element is on top", so popping restores the previous min for free. **O(1) for all operations**, O(n) extra space.
+
+:::senior
+A space optimization stores only *values ≤ current min* on the min stack (pushing a duplicate when equal), or encodes deltas against the min — worth mentioning as the follow-up that trims the auxiliary space.
+:::`,
+  },
+  {
+    id: 'dsa-sq-eval-rpn',
+    question: 'Evaluate an expression in Reverse Polish (postfix) notation.',
+    difficulty: 'Medium',
+    category: 'Stacks & Queues',
+    tags: ['stack', 'expression', 'postfix'],
+    answer: `Postfix needs no precedence rules — a **stack** handles it directly. Push operands; on an operator, **pop the top two**, apply, and push the result.
+
+\`\`\`java
+Deque<Integer> st = new ArrayDeque<>();
+for (String tok : tokens) {
+  switch (tok) {
+    case "+" -> st.push(st.pop() + st.pop());
+    case "*" -> st.push(st.pop() * st.pop());
+    case "-" -> { int b = st.pop(); st.push(st.pop() - b); }
+    case "/" -> { int b = st.pop(); st.push(st.pop() / b); }
+    default  -> st.push(Integer.parseInt(tok));
+  }
+}
+return st.pop();
+\`\`\`
+
+**O(n) time, O(n) space.**
+
+:::gotcha
+Order matters for **non-commutative** operators: for \`-\` and \`/\`, the **first** popped value is the right operand. Swapping them silently computes \`b - a\` instead of \`a - b\`.
+:::`,
+  },
+  {
+    id: 'dsa-sq-daily-temperatures',
+    question: 'For each day, how many days until a warmer temperature? Solve in O(n).',
+    difficulty: 'Medium',
+    category: 'Stacks & Queues',
+    tags: ['monotonic stack', 'next greater', 'pattern'],
+    answer: `This is "**next greater element**" in disguise. Keep a **monotonic decreasing stack of indices** waiting for a warmer day; when today is warmer, it resolves everything colder on top.
+
+\`\`\`java
+int[] ans = new int[n];
+Deque<Integer> st = new ArrayDeque<>();   // indices, temps decreasing
+for (int i = 0; i < n; i++) {
+  while (!st.isEmpty() && temps[i] > temps[st.peek()]) {
+    int j = st.pop();
+    ans[j] = i - j;      // distance to the warmer day
+  }
+  st.push(i);
+}
+return ans;             // 0 for days with no warmer future day
+\`\`\`
+
+**O(n) time** — each index is pushed and popped once (amortized). The transferable cue: "**for each element, find the next one that is greater/smaller**" → monotonic stack storing **indices** so you can recover distances.`,
+  },
+  {
+    id: 'dsa-sq-decode-string',
+    question: 'Decode a string like "3[a2[c]]" into "accaccacc".',
+    difficulty: 'Medium',
+    category: 'Stacks & Queues',
+    tags: ['stack', 'parsing', 'nesting'],
+    answer: `Nested repetition calls for **two stacks** (or one of pairs): one for the **counts**, one for the **string built so far**. On \`[\` push the state; on \`]\` pop and repeat.
+
+\`\`\`java
+Deque<Integer> counts = new ArrayDeque<>();
+Deque<StringBuilder> strs = new ArrayDeque<>();
+StringBuilder cur = new StringBuilder();
+int k = 0;
+for (char c : s.toCharArray()) {
+  if (Character.isDigit(c)) k = k * 10 + (c - '0');
+  else if (c == '[') { counts.push(k); strs.push(cur); cur = new StringBuilder(); k = 0; }
+  else if (c == ']') {
+    StringBuilder prev = strs.pop();
+    prev.append(cur.toString().repeat(counts.pop()));
+    cur = prev;
+  } else cur.append(c);
+}
+return cur.toString();
+\`\`\`
+
+**O(output length) time.** Building the multi-digit count with \`k*10 + digit\` handles \`12[a]\`. Nested brackets are exactly what a stack's LIFO order is for.`,
+  },
+  {
+    id: 'dsa-sq-stack-via-queues',
+    question: 'How do you implement a stack using queues?',
+    difficulty: 'Medium',
+    category: 'Stacks & Queues',
+    tags: ['stack', 'queue', 'design'],
+    answer: `Use **one queue** and make \`push\` do the work: after enqueuing the new element, **rotate** every earlier element behind it, so the newest sits at the front and \`pop\` is just a dequeue.
+
+\`\`\`java
+Queue<Integer> q = new ArrayDeque<>();
+void push(int x) {
+  q.add(x);
+  for (int i = 1; i < q.size(); i++) q.add(q.poll()); // rotate
+}
+int pop()  { return q.poll(); }   // front is the newest
+int top()  { return q.peek(); }
+\`\`\`
+
+This makes **push O(n)** and **pop O(1)** — the mirror image of the two-stacks-for-a-queue design, which is O(1) push and amortized O(1) pop.
+
+:::note
+You can choose which operation to make expensive. "Costly push" keeps the queue in stack order; "costly pop" would move the work to removal instead.
+:::`,
+  },
+  {
+    id: 'dsa-sq-asteroid-collision',
+    question: 'Simulate asteroid collisions (positive = moving right, negative = left).',
+    difficulty: 'Medium',
+    category: 'Stacks & Queues',
+    tags: ['stack', 'simulation', 'pattern'],
+    answer: `A collision only happens when a **right-moving** asteroid (on the stack top, positive) meets a **left-moving** one (negative, incoming). A **stack** models the survivors.
+
+\`\`\`java
+Deque<Integer> st = new ArrayDeque<>();
+for (int a : asteroids) {
+  boolean alive = true;
+  while (alive && a < 0 && !st.isEmpty() && st.peek() > 0) {
+    if (st.peek() < -a) st.pop();          // top explodes, keep checking
+    else if (st.peek() == -a) { st.pop(); alive = false; } // both explode
+    else alive = false;                     // incoming explodes
+  }
+  if (alive) st.push(a);
+}
+\`\`\`
+
+**O(n) time** — each asteroid is pushed and popped at most once. The stack cleanly captures the chain reaction: a surviving left-mover keeps colliding with the next right-mover beneath it until it dies or clears the stack.`,
+  },
+  {
+    id: 'dsa-sq-largest-rectangle',
+    question: 'Find the largest rectangle in a histogram in O(n).',
+    difficulty: 'Hard',
+    category: 'Stacks & Queues',
+    tags: ['monotonic stack', 'histogram', 'pattern'],
+    answer: `For each bar, the largest rectangle using it as the height extends until a **shorter** bar on each side. A **monotonic increasing stack of indices** finds those boundaries in one pass.
+
+\`\`\`java
+Deque<Integer> st = new ArrayDeque<>();
+int best = 0;
+for (int i = 0; i <= n; i++) {
+  int h = (i == n) ? 0 : heights[i];        // sentinel flushes the stack
+  while (!st.isEmpty() && heights[st.peek()] > h) {
+    int height = heights[st.pop()];
+    int left = st.isEmpty() ? -1 : st.peek();
+    best = Math.max(best, height * (i - left - 1)); // width between boundaries
+  }
+  st.push(i);
+}
+\`\`\`
+
+When a bar shorter than the stack top arrives, the popped bar's rectangle is bounded: **right edge** is \`i\`, **left edge** is the new stack top. Width = \`i - left - 1\`. **O(n)** — each index pushed/popped once.
+
+:::senior
+The trailing sentinel (height 0 at index \`n\`) forces every remaining bar to resolve, avoiding a second cleanup loop. This pattern also solves "maximal rectangle" in a binary matrix row by row.
+:::`,
+  },
+  {
+    id: 'dsa-sq-median-stream',
+    question: 'Design a data structure to return the median of a stream of numbers.',
+    difficulty: 'Hard',
+    category: 'Stacks & Queues',
+    tags: ['heap', 'two-heaps', 'streaming', 'median'],
+    answer: `Keep **two heaps**: a **max-heap** for the lower half and a **min-heap** for the upper half, balanced so their sizes differ by at most one. The median is then a heap top (or the average of both tops).
+
+\`\`\`java
+PriorityQueue<Integer> lo = new PriorityQueue<>(Collections.reverseOrder()); // max-heap
+PriorityQueue<Integer> hi = new PriorityQueue<>();                            // min-heap
+
+void add(int x) {
+  lo.offer(x);
+  hi.offer(lo.poll());                 // funnel top of lo into hi
+  if (hi.size() > lo.size()) lo.offer(hi.poll()); // rebalance
+}
+double median() {
+  return lo.size() > hi.size() ? lo.peek() : (lo.peek() + hi.peek()) / 2.0;
+}
+\`\`\`
+
+**add is O(log n), median is O(1).** The cross-push (add to \`lo\`, move its max to \`hi\`) guarantees every element in \`lo\` ≤ every element in \`hi\`, so the tops straddle the median.
+
+:::senior
+Two balanced heaps is the canonical "**median / running k-th** on a stream" pattern — mention it whenever you must maintain an order statistic under insertions.
+:::`,
+  },
+  {
+    id: 'dsa-sq-merge-k-lists',
+    question: 'Merge k sorted linked lists into one sorted list efficiently.',
+    difficulty: 'Hard',
+    category: 'Stacks & Queues',
+    tags: ['heap', 'priority queue', 'merge', 'k-way'],
+    answer: `Naively merging one list at a time is O(N·k). A **size-k min-heap** of the current heads gives **O(N log k)**: always pop the global smallest head and push its successor.
+
+\`\`\`java
+PriorityQueue<Node> pq = new PriorityQueue<>((a, b) -> a.val - b.val);
+for (Node l : lists) if (l != null) pq.offer(l);
+Node dummy = new Node(0), tail = dummy;
+while (!pq.isEmpty()) {
+  Node n = pq.poll();
+  tail.next = n; tail = n;
+  if (n.next != null) pq.offer(n.next);
+}
+return dummy.next;
+\`\`\`
+
+The heap holds at most **k** nodes (one per list), so each of the **N** total nodes costs one O(log k) push and pop. **O(N log k) time, O(k) space.**
+
+:::note
+The alternative — **divide-and-conquer** pairwise merging — is also O(N log k) and avoids the heap; it mirrors merge sort's merge step across the k lists.
+:::`,
+  },
 ];
 
 export default questions;

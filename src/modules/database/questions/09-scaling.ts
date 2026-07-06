@@ -262,6 +262,242 @@ That often lands **under ~20**, even for busy services. The pool should be the *
 This bites hardest with **serverless / many-instance** deployments: 100 instances x a 20-connection pool = 2000 connections and an instantly-overwhelmed database. Front them with a proxy pooler (**PgBouncer**, RDS Proxy). And note **virtual threads** break the "one connection per thread" model — keep the pool small regardless of thread count.
 :::`,
   },
+  {
+    id: 'db-scale-statement-vs-row-replication',
+    question: 'What is the difference between statement-based and row-based replication?',
+    difficulty: 'Easy',
+    category: 'Scaling',
+    tags: ['replication', 'binlog', 'statement-based', 'row-based'],
+    answer: `Two ways a primary tells replicas what changed:
+
+- **Statement-based (SBR)** — ships the **SQL statement**. Compact logs, but **non-deterministic** statements replicate wrong: \`NOW()\`, \`RAND()\`, \`UUID()\`, auto-increment races, \`LIMIT\` without \`ORDER BY\` — the replica can compute a different result and **diverge**.
+- **Row-based (RBR)** — ships the **actual changed row images** (before/after). Deterministic and safe, but a single \`UPDATE\` touching a million rows logs a million rows.
+- **Mixed** — MySQL chooses per statement: row-based for unsafe ones, statement-based otherwise.
+
+MySQL's binlog defaults to **ROW** today; Postgres **logical** replication is row-based, and **physical** (WAL) replication ships byte-level changes (lower still).
+
+:::gotcha
+Statement-based replication silently **diverges** replicas on non-deterministic SQL — the reason row-based became the default. Row-based bloats the log on bulk writes, so keep large \`UPDATE\`/\`DELETE\` operations batched.
+:::`,
+  },
+  {
+    id: 'db-scale-failover-split-brain',
+    question: 'How does automatic failover work, and how do you avoid split-brain?',
+    difficulty: 'Hard',
+    category: 'Scaling',
+    tags: ['failover', 'split-brain', 'quorum', 'fencing'],
+    answer: `**Failover** promotes a replica to primary when the primary dies. The danger is **split-brain**: the old primary is not actually dead (just partitioned), so **two** nodes accept writes and diverge.
+
+Defenses:
+
+- **Quorum** — require a **majority** of voters to agree on the new primary. A minority partition cannot elect one, so it cannot split. This needs an **odd** number of voters (3, 5) to break ties.
+- **Fencing / STONITH** — forcibly isolate the old primary (kill it, revoke its VIP/storage) **before** promoting, so it cannot keep serving writes.
+- **Leases / epochs** — the new primary carries a higher term; the old one's writes are rejected when it rejoins.
+
+\`\`\`text
+partition -> majority side elects new primary -> old primary fenced -> no split-brain
+\`\`\`
+
+:::senior
+This is exactly what consensus protocols (Raft/Paxos: etcd, Consul) make correct. Rolling your own failover on a naive health check is how you **get** split-brain — use a proven coordinator (Patroni, Orchestrator, or managed cloud failover).
+:::`,
+  },
+  {
+    id: 'db-scale-partitioning-strategies',
+    question: 'What are the main table partitioning strategies, and what is partition pruning?',
+    difficulty: 'Easy',
+    category: 'Scaling',
+    tags: ['partitioning', 'range', 'list', 'hash', 'pruning'],
+    answer: `**Partitioning** splits one big logical table into physical **partitions** inside the same database. Strategies:
+
+- **Range** — by a value range: dates (month/year), id ranges. Ideal for time-series and dropping old data by detaching a partition.
+- **List** — by an explicit set: \`region IN ('US','CA')\`, status. Good for categorical splits.
+- **Hash** — by \`hash(key)\` to spread rows **evenly** when there is no natural range.
+
+**Partition pruning** is the payoff: if a query filters on the partition key, the planner scans **only** the relevant partitions.
+
+\`\`\`sql
+CREATE TABLE events (...) PARTITION BY RANGE (created_at);
+-- WHERE created_at >= '2024-06-01' scans only June's partition
+\`\`\`
+
+:::gotcha
+Pruning works **only** when the query filters on the partition key — a query without it scans **every** partition, often worse than one unpartitioned indexed table. And a monotonic range key funnels all new writes into the newest partition (a hotspot).
+:::`,
+  },
+  {
+    id: 'db-scale-partitioning-vs-sharding',
+    question: 'What is the difference between partitioning and sharding?',
+    difficulty: 'Medium',
+    category: 'Scaling',
+    tags: ['partitioning', 'sharding', 'scaling'],
+    answer: `Both split a table by a key, but at different scopes:
+
+- **Partitioning** — split within **one** database instance. The engine manages partitions; queries are transparent; you still have one machine's CPU/RAM/disk. Solves manageability, pruning, index size, and cheap old-data drops.
+- **Sharding** — split across **multiple independent** databases/servers. Each shard is a separate DB; the **application or a router** picks which one. Solves write throughput, total storage, and load beyond one machine.
+
+| | Partitioning | Sharding |
+|---|---|---|
+| Scope | one server | many servers |
+| Managed by | the DB engine | app / proxy / router |
+| Scales | manageability, scans | writes, storage, throughput |
+| Cross-piece query | normal SQL | scatter-gather, hard joins |
+
+:::senior
+Partitioning is a **single-node** optimization; sharding is **horizontal scale-out** with real distributed cost (cross-shard joins/transactions, rebalancing). **Partition first**, and shard only when one node genuinely cannot cope.
+:::`,
+  },
+  {
+    id: 'db-scale-multi-tenancy',
+    question: 'What are the multi-tenant database models, and how do you choose?',
+    difficulty: 'Hard',
+    category: 'Scaling',
+    tags: ['multi-tenancy', 'saas', 'isolation', 'data-modeling'],
+    answer: `Three models, trading isolation against cost and operability:
+
+| Model | Isolation | Scale | Notes |
+|---|---|---|---|
+| **Shared schema** (\`tenant_id\` column) | Weakest | Thousands of tenants, cheapest | One migration; noisy-neighbor + leak risk |
+| **Schema-per-tenant** | Medium | Hundreds | Per-tenant tweaks; migrations run N times |
+| **Database-per-tenant** | Strongest | Most expensive | Full isolation, easy per-tenant backup/move |
+
+- **Shared schema** scales to many small tenants, but a forgotten \`tenant_id\` filter **leaks data across tenants** — enforce with **row-level security** or a mandatory scoping layer.
+- **DB-per-tenant** gives clean isolation and per-tenant compliance/backups, but does not scale operationally to 100k tenants.
+
+:::senior
+Many SaaS start **shared-schema** and graduate their largest or most-regulated tenants to dedicated schemas/databases — a hybrid. Decide on **tenant count**, **isolation/compliance** needs, and the **blast radius** of one bad query.
+:::`,
+  },
+  {
+    id: 'db-scale-cache-aside',
+    question: 'How does the cache-aside (lazy-loading) pattern work?',
+    difficulty: 'Easy',
+    category: 'Scaling',
+    tags: ['caching', 'cache-aside', 'redis'],
+    answer: `The application manages the cache directly.
+
+- **Read** — check the cache; on a **hit** return it; on a **miss** load from the DB, populate the cache, then return.
+- **Write** — update the DB and **invalidate (delete)** the cached key.
+
+\`\`\`text
+READ:  hit  -> return cached
+       miss -> row = DB; cache.set(key, row, ttl); return row
+WRITE: DB update; cache.delete(key)     -- next read repopulates
+\`\`\`
+
+It is the most common general-purpose pattern (Redis in front of a SQL DB). The cache only holds data actually requested, and a cache outage still lets reads fall through to the DB — degraded, not down.
+
+:::gotcha
+Prefer **delete** over update-in-place on writes (avoids a stale-write race), and always set a **TTL** so a missed invalidation self-heals. The first read after each write is a guaranteed cold **miss** — acceptable for most workloads.
+:::`,
+  },
+  {
+    id: 'db-scale-zero-downtime-migration',
+    question: 'How do you make a breaking schema change with zero downtime?',
+    difficulty: 'Hard',
+    category: 'Scaling',
+    tags: ['migrations', 'expand-contract', 'zero-downtime', 'backfill'],
+    answer: `Use **expand-contract (parallel change)** so old and new code both work throughout the rollout:
+
+1. **Expand** — add the new structure **backward-compatibly**: a new nullable column or table. No drops, no renames; old code ignores it.
+2. **Backfill** — populate it in **small, throttled batches**, never one giant locking \`UPDATE\`.
+3. **Migrate code** — deploy code that writes **both** old and new (dual-write), then reads from new.
+4. **Contract** — once everything uses the new path and is verified, drop the old column/table.
+
+\`\`\`text
+add nullable col -> backfill in batches -> dual-write -> switch reads -> drop old
+\`\`\`
+
+:::gotcha
+**Never rename a column in one step** — old code breaks the instant it deploys. A rename is really *add-new + backfill + dual-write + switch + drop*: five independently deployable, reversible steps, not one.
+:::`,
+  },
+  {
+    id: 'db-scale-lock-safe-ddl',
+    question: 'Which schema changes take dangerous locks, and how do you apply them safely?',
+    difficulty: 'Medium',
+    category: 'Scaling',
+    tags: ['ddl', 'locking', 'online-migration', 'postgres', 'mysql'],
+    answer: `Some DDL takes an exclusive lock that blocks reads/writes for its duration — fine on a small table, an outage on a large one.
+
+- **\`CREATE INDEX\`** locks writes → use **\`CREATE INDEX CONCURRENTLY\`** (Postgres) or online DDL / \`pt-online-schema-change\` / \`gh-ost\` (MySQL).
+- **Adding a column with a volatile default / \`NOT NULL\`** historically rewrote the whole table. Modern Postgres adds a **constant** default instantly (metadata only); otherwise add nullable, backfill, then validate the \`NOT NULL\`.
+- **Changing a column type** usually rewrites and locks — do it via a new column.
+
+:::gotcha
+Even a "fast" \`ALTER\` must first **acquire** the lock, so it queues behind a long-running query and then **blocks everything behind it** — a millisecond change can cascade into an outage. Set a short \`lock_timeout\`, retry, and migrate in low-traffic windows.
+:::`,
+  },
+  {
+    id: 'db-scale-pg-vs-mysql',
+    question: 'How would you choose between PostgreSQL and MySQL?',
+    difficulty: 'Easy',
+    category: 'Scaling',
+    tags: ['postgres', 'mysql', 'database-choice'],
+    answer: `Both are excellent — choose on features and ecosystem, not folklore.
+
+- **PostgreSQL** — richer feature set: advanced types (\`JSONB\`, arrays, ranges, PostGIS), powerful indexing (GIN/GiST/partial/expression), deep window/CTE support, strict standards, **transactional DDL**, extensibility. The default for complex, analytical, or correctness-sensitive workloads.
+- **MySQL** — huge install base, simple replication, very fast on straightforward read-heavy web workloads; InnoDB is solid and hosting is ubiquitous.
+
+:::senior
+The differences that actually bite: **default isolation** (Postgres \`READ COMMITTED\` vs InnoDB \`REPEATABLE READ\`), **clustered PK** (InnoDB) vs **heap** (Postgres), \`NULL\` ordering, and Postgres's transactional DDL for safe migrations. For a greenfield app needing rich queries most teams pick Postgres; MySQL fits simple workloads with a favorable ecosystem.
+:::`,
+  },
+  {
+    id: 'db-scale-pgbouncer-modes',
+    question: "What are PgBouncer's pooling modes, and what breaks in transaction mode?",
+    difficulty: 'Hard',
+    category: 'Scaling',
+    tags: ['connection-pooling', 'pgbouncer', 'transaction-pooling'],
+    answer: `A pooler multiplexes many client connections onto few server connections. PgBouncer offers three modes:
+
+- **Session pooling** — a server connection is tied to the client for its whole session. Safest, least sharing.
+- **Transaction pooling** — the server connection is held only for a **transaction**, then returned. Maximum sharing — the usual choice for many app instances.
+- **Statement pooling** — returned after each statement; forbids multi-statement transactions.
+
+What breaks in **transaction mode**: anything using **session state** that outlives a transaction — session \`SET\`, advisory locks, \`LISTEN\`/\`NOTIFY\`, \`WITH HOLD\` cursors, and **server-side prepared statements** (prepared on one server connection, absent on the next).
+
+:::gotcha
+Transaction pooling gives the biggest connection reduction (vital for serverless / many-instance apps) but silently breaks session features. Disable or emulate prepared statements, and audit \`SET\`/advisory-lock assumptions before enabling it.
+:::`,
+  },
+  {
+    id: 'db-scale-backups-pitr',
+    question: 'What backup strategies exist, and how does point-in-time recovery work?',
+    difficulty: 'Medium',
+    category: 'Scaling',
+    tags: ['backups', 'pitr', 'wal', 'disaster-recovery'],
+    answer: `Two families:
+
+- **Logical** — export data as statements/rows (\`pg_dump\`, \`mysqldump\`). Portable across versions/architectures and selective (one table), but slow to restore and not incremental.
+- **Physical** — copy the data files/blocks (\`pg_basebackup\`, XtraBackup, storage snapshot). Fast whole-cluster restore, but version/architecture-specific.
+
+**Point-in-time recovery (PITR)** = a physical **base backup** plus the continuously **archived WAL/binlog**. To recover, restore the base backup and **replay the log up to a chosen timestamp/LSN** — rolling back to the moment **just before** a bad deploy or accidental \`DELETE\`, not merely the last nightly dump.
+
+:::gotcha
+A backup you have never **restored** is a hope, not a backup — test restores and measure **RTO**. Set your **RPO** (max acceptable data loss): continuous WAL archiving gives seconds; nightly dumps risk losing a day.
+:::`,
+  },
+  {
+    id: 'db-scale-resharding',
+    question: 'A shard is getting too big. How do you reshard without a painful migration?',
+    difficulty: 'Hard',
+    category: 'Scaling',
+    tags: ['sharding', 'resharding', 'consistent-hashing', 'rebalancing'],
+    answer: `The pain depends entirely on how you mapped keys to shards:
+
+- **Naive modulo** (\`shard = hash(key) % N\`) — adding a shard changes \`N\`, so **almost every key** remaps → a massive data move. Avoid this.
+- **Consistent hashing** — keys and shards sit on a ring; adding a shard moves only the keys between two ring points (~\`1/N\` of data).
+- **Virtual buckets / vnodes** — hash keys into a **fixed large** number of logical buckets (e.g. 4096), then map buckets → physical shards. Rebalancing moves whole buckets; the key→bucket function never changes. This is what Vitess, Citus, and Dynamo-style systems do.
+
+\`\`\`text
+key -> hash -> bucket (fixed 4096) -> shard (movable mapping)
+\`\`\`
+
+:::senior
+Design the bucket layer **up front** — retrofitting resharding onto modulo sharding is one of the most dreaded migrations in the industry. Move buckets **online**: copy/dual-write a bucket, verify, cut over reads, then drop the source.
+:::`,
+  },
 ];
 
 export default questions;

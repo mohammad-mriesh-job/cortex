@@ -20,12 +20,12 @@ flowchart LR
   W[Web] --> G
   T[3rd-party] --> G
   subgraph Edge
-    G[API Gateway<br/>auth · rate limit · routing · TLS]
+    G["API Gateway — auth, rate limit, TLS"]
   end
-  G --> S1[Users svc]
-  G --> S2[Orders svc]
-  G --> S3[Payments svc]
-  G --> S4[Search svc]
+  G -->|"/users/*"| S1[Users svc]
+  G -->|"/orders/*"| S2[Orders svc]
+  G -->|"/payments/*"| S3[Payments svc]
+  G -->|"/search/*"| S4[Search svc]
 ```
 
 Typical responsibilities:

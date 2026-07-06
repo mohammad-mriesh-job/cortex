@@ -66,6 +66,57 @@ Inheritance locks behavior in at compile time and explodes into subclass combina
 (`FlyingDuck`, `RubberDuck`, `FlyingRubberDuck`...). Composition lets an object **hold** the varying
 behavior and even swap it at runtime — the core insight behind Strategy, Decorator, State, and more.
 
+````tabs
+tabs:
+  - label: Inheritance (rigid)
+    body: |
+      Two independent behaviours (fly, quack) force a subclass per combination — and behaviour
+      is welded in at compile time.
+      ```java
+      class Duck { void fly() { } void quack() { } }
+      class RubberDuck extends Duck {
+        @Override void fly()   { /* can't fly — override to nothing */ }
+        @Override void quack() { /* squeak */ }
+      }
+      // MallardDuck, DecoyDuck, RobotDuck... each re-overrides the same two axes.
+      ```
+  - label: Composition (flexible)
+    body: |
+      The varying behaviours become injected parts. New combination = new wiring, not a new class.
+      ```java
+      interface FlyBehavior   { void fly(); }
+      interface QuackBehavior { void quack(); }
+
+      class Duck {
+        private FlyBehavior fly;
+        private QuackBehavior quack;
+        Duck(FlyBehavior f, QuackBehavior q) { this.fly = f; this.quack = q; }
+        void setFly(FlyBehavior f) { this.fly = f; }   // swappable at runtime
+        void perform() { fly.fly(); quack.quack(); }
+      }
+
+      Duck rubber = new Duck(() -> { }, () -> System.out.println("squeak"));
+      ```
+````
+
+## Mapping principles to patterns
+
+When an interviewer asks *"which SOLID principle does pattern X serve?"*, this is the map:
+
+| Principle | Patterns that embody it |
+|--|--|
+| **S**ingle Responsibility | Facade (orchestration only), Command (one action per object), Visitor (operation split from structure) |
+| **O**pen/Closed | Strategy, Decorator, Factory Method, Chain of Responsibility — extend by adding a class |
+| **L**iskov Substitution | Every pattern with a shared interface depends on it — a Decorator that breaks its component's contract breaks the stack |
+| **I**nterface Segregation | Command (`execute()`/`undo()` only), Iterator (`hasNext`/`next` only) |
+| **D**ependency Inversion | Dependency Injection, Abstract Factory, Bridge — high-level code depends on abstractions |
+
+:::gotcha
+Composition is not free: each delegation layer adds an object, an indirection, and a place for a
+`null` to hide. And inheritance is not evil — **Template Method** uses it deliberately because the
+*skeleton* genuinely is an is-a relationship. The principle says *favor* composition, not *always*.
+:::
+
 :::senior
 When you see a pattern, ask *"which principle is this protecting?"* Decorator and Strategy both pick
 **composition over inheritance**; Factory Method serves **program to an interface**; Template Method

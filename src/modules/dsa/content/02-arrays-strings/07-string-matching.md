@@ -73,6 +73,72 @@ int kmp(String t, String p) {
 }
 ```
 
+The search loop is a tiny state machine — every character of the text is consumed exactly once:
+
+```mermaid
+flowchart TD
+  C{"t[i] == p[j] ?"} -->|"yes"| Adv["advance both: i++ and j++"]
+  Adv --> Full{"j == m ?"}
+  Full -->|"yes"| M["report match at i - j"]
+  Full -->|"no"| C
+  C -->|"no and j > 0"| FB["j = lps[j-1] — slide the pattern, i stays"]
+  FB --> C
+  C -->|"no and j == 0"| Inc["i++ — nothing matched to reuse"]
+  Inc --> C
+```
+
+## Watch it: the fallback in action
+
+Pattern `P = "abab"` has `lps = [0, 0, 1, 2]`. Search it in `T = "abacabab"` and watch what
+happens at the mismatch — the text pointer `i` **never moves backward**.
+
+```walkthrough
+title: KMP search — P = "abab" in T = "abacabab"
+code: |
+  int i = 0, j = 0;               // i over text, j over pattern
+  while (i < n) {
+    if (t[i] == p[j]) {
+      i++; j++;
+      if (j == m) return i - j;   // full match
+    }
+    else if (j > 0) j = lps[j-1]; // fall back — i stays put
+    else i++;                     // j == 0: just move on
+  }
+steps:
+  - text: '`t[0] = a` matches `p[0] = a`. Both pointers advance. j = 1.'
+    array: [a, b, a, c, a, b, a, b]
+    highlight: [0]
+    pointers: { 0: 'i' }
+    line: 4
+  - text: '`t[1] = b` and `t[2] = a` match `p[1]` and `p[2]` too. Three pattern chars are live: j = 3.'
+    array: [a, b, a, c, a, b, a, b]
+    sorted: [0, 1]
+    highlight: [2]
+    pointers: { 2: 'i' }
+    line: 4
+  - text: '**Mismatch**: `t[3] = c` vs `p[3] = b`. Naive search would restart from text index 1. KMP instead reuses the matched prefix: `j = lps[2] = 1`. Note `i` did not move.'
+    array: [a, b, a, c, a, b, a, b]
+    highlight: [3]
+    pointers: { 3: 'i' }
+    line: 7
+  - text: 'Still mismatched: `c` vs `p[1] = b` → fall back again, `j = lps[0] = 0`. Then `c` vs `p[0] = a` fails with j = 0, so finally `i++`. Forward only.'
+    array: [a, b, a, c, a, b, a, b]
+    highlight: [3]
+    pointers: { 3: 'i' }
+    line: 8
+  - text: 'Fresh alignment from i = 4: `a`, `b`, `a` all match — j = 3 again.'
+    array: [a, b, a, c, a, b, a, b]
+    sorted: [4, 5]
+    highlight: [6]
+    pointers: { 6: 'i' }
+    line: 4
+  - text: '`t[7] = b` matches `p[3]` → j = 4 = m. **Match at i − j = 4.** Every text char was consumed once — that is the O(n + m) guarantee.'
+    array: [a, b, a, c, a, b, a, b]
+    sorted: [4, 5, 6, 7]
+    pointers: { 7: 'i' }
+    line: 5
+```
+
 :::gotcha
 The subtle line is the fallback `j = lps[j - 1]` on mismatch — **not** `j = 0`. Resetting to 0 would re-scan characters KMP already knows match, collapsing back to O(n·m). The LPS array is precisely the memory that lets it skip.
 :::

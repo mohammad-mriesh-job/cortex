@@ -144,6 +144,23 @@ make disjoint writes, and each is individually valid. Postgres's `SERIALIZABLE` 
 dependency cycles — giving true serializability without classic locking.
 :::
 
+```flashcards
+title: MVCC recall
+cards:
+  - front: '`xmin` and `xmax` on a row version?'
+    back: '`xmin` = txn that **created** the version; `xmax` = txn that **superseded/deleted** it (empty = still live).'
+  - front: 'The MVCC visibility rule in one line?'
+    back: 'A version is visible when **xmin committed ≤ my snapshot < xmax** (or xmax empty).'
+  - front: 'MVCC golden rule?'
+    back: '**Readers never block writers; writers never block readers.** Only writer-vs-writer on the same row contends.'
+  - front: 'Where do old versions live in Postgres vs InnoDB?'
+    back: 'Postgres: in the **table heap** (VACUUM reclaims). InnoDB/Oracle: rebuilt from the **undo log** (purge trims).'
+  - front: 'What does one long-running transaction do to the whole database?'
+    back: 'Pins the **xmin horizon** — GC can''t reclaim any version it might still see, so dead tuples/undo pile up everywhere.'
+  - front: 'Concurrent-write policy under snapshot isolation?'
+    back: '**First-updater-wins**: the second writer blocks; when the first commits it gets a write-conflict/serialization error instead of silently overwriting.'
+```
+
 ## Check yourself
 
 ```quiz

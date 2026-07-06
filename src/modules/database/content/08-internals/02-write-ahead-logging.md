@@ -68,7 +68,7 @@ replays WAL **from the last checkpoint**, not the entire history.
 
 ```mermaid
 flowchart LR
-  CKPT["CHECKPOINT<br/>all dirty pages ≤ here flushed"] --> L1["log rec"]
+  CKPT["CHECKPOINT — all dirty pages up to here flushed"] --> L1["log rec"]
   L1 --> L2["log rec"]
   L2 --> L3["log rec"]
   L3 --> CRASH["crash"]

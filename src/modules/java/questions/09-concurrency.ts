@@ -243,6 +243,259 @@ try (var exec = Executors.newVirtualThreadPerTaskExecutor()) {
 Pitfalls: **don't pool** virtual threads (create one per task; cap load with a \`Semaphore\`). On Java 21, blocking inside a \`synchronized\` block **pins** the carrier and hurts scalability — use \`ReentrantLock\` (largely fixed in JDK 24). And millions of threads make heavy \`ThreadLocal\` use expensive — prefer scoped values.
 :::`,
   },
+  {
+    id: 'conc-thread-vs-runnable-vs-callable',
+    question: 'What is the difference between Thread, Runnable, and Callable?',
+    difficulty: 'Easy',
+    category: 'Concurrency',
+    tags: ['threads', 'runnable', 'callable'],
+    answer: `\`Thread\` is the **worker**; \`Runnable\` and \`Callable\` are the **task** it runs:
+
+| | \`Runnable\` | \`Callable<V>\` |
+|--|-----------|---------------|
+| Method | \`run()\` | \`call()\` |
+| Returns | \`void\` | a value \`V\` |
+| Checked exceptions | **can't** throw | **can** throw |
+| Result handle | — | a \`Future<V>\` |
+
+\`\`\`java
+Runnable r = () -> log.info("done");
+Callable<Integer> c = () -> compute();     // returns a value, may throw
+
+Future<Integer> f = executor.submit(c);
+int result = f.get();                       // blocks for the result
+\`\`\`
+
+**Prefer implementing \`Runnable\`/\`Callable\` over extending \`Thread\`**: your class stays free to extend something else, the task is reusable across a thread pool, and it separates *what to do* from *how it runs*.
+
+:::tip
+You almost never create raw \`Thread\`s in application code — submit \`Runnable\`/\`Callable\` tasks to an \`ExecutorService\` and let it manage the threads.
+:::`,
+  },
+  {
+    id: 'conc-why-thread-pools',
+    question: 'Why use an ExecutorService instead of creating threads with new Thread()?',
+    difficulty: 'Medium',
+    category: 'Concurrency',
+    tags: ['executors', 'thread-pool', 'executorservice'],
+    answer: `A thread is **expensive** (~1 MB stack, an OS thread) and \`new Thread()\` per task is **unbounded** — a traffic spike spawns thousands of threads and thrashes or OOMs. An \`ExecutorService\` reuses a **bounded pool** of workers and decouples *submitting* work from *running* it.
+
+\`\`\`java
+ExecutorService pool = Executors.newFixedThreadPool(8);
+Future<Integer> f = pool.submit(() -> compute());
+pool.shutdown();
+\`\`\`
+
+You gain: worker **reuse**, a **work queue**, \`Future\` results, lifecycle (\`shutdown\`/\`awaitTermination\`), scheduling (\`ScheduledExecutorService\`), and rejection policies.
+
+Factory shortcuts: \`newFixedThreadPool\`, \`newCachedThreadPool\`, \`newSingleThreadExecutor\`, \`newScheduledThreadPool\`, \`newVirtualThreadPerTaskExecutor\` (Java 21).
+
+:::senior
+The \`Executors\` factories hide risky defaults — \`newFixedThreadPool\` uses an **unbounded** queue (backlog → OOM); \`newCachedThreadPool\` has **unbounded** thread growth. In production, construct a \`ThreadPoolExecutor\` directly with a **bounded** queue and an explicit \`RejectedExecutionHandler\`.
+:::`,
+  },
+  {
+    id: 'conc-future-vs-completablefuture',
+    question: 'What does CompletableFuture add over a plain Future?',
+    difficulty: 'Medium',
+    category: 'Concurrency',
+    tags: ['future', 'completablefuture', 'async'],
+    answer: `A \`Future\` (Java 5) is just a **handle** to a pending result — and it's frustratingly limited: \`get()\` **blocks**, you can't chain steps, register a callback, combine futures, or complete it manually.
+
+\`CompletableFuture\` (Java 8) is a composable, **non-blocking** async pipeline:
+
+| | \`Future\` | \`CompletableFuture\` |
+|--|----------|----------------------|
+| Get result | blocking \`get()\` | callbacks (\`thenApply\`, \`thenAccept\`) |
+| Chain steps | no | \`thenCompose\` |
+| Combine | no | \`thenCombine\`, \`allOf\`, \`anyOf\` |
+| Errors | \`get\` throws | \`exceptionally\`, \`handle\` |
+| Complete manually | no | \`complete(v)\` |
+
+\`\`\`java
+CompletableFuture.supplyAsync(() -> fetchUser(id))
+    .thenApply(User::name)
+    .exceptionally(ex -> "unknown")
+    .thenAccept(System.out::println);   // never blocks
+\`\`\`
+
+:::gotcha
+By default \`*Async\` methods run on the **common ForkJoinPool** — fine for CPU work, dangerous for blocking I/O (it can starve). Pass your own \`Executor\` for I/O-bound tasks.
+:::`,
+  },
+  {
+    id: 'conc-chm-vs-synchronizedmap',
+    question: 'ConcurrentHashMap vs Collections.synchronizedMap — which and why?',
+    difficulty: 'Medium',
+    category: 'Concurrency',
+    tags: ['concurrenthashmap', 'synchronizedmap', 'collections'],
+    answer: `Both are thread-safe, but they scale very differently:
+
+- **\`Collections.synchronizedMap(map)\`** wraps a plain map so **every method** is \`synchronized\` on **one lock**. All access is serialized — no real concurrency — and **iteration still requires manual external synchronization** or it throws \`ConcurrentModificationException\`.
+- **\`ConcurrentHashMap\`** uses **per-bucket** locking and lock-free reads, so many threads read and write in parallel. Its iterators are **weakly consistent** (never throw CME, no external lock needed).
+
+\`\`\`java
+// synchronizedMap: you MUST lock around iteration
+synchronized (syncMap) { for (var e : syncMap.entrySet()) { ... } }
+
+// ConcurrentHashMap: atomic compound ops, no external lock
+chm.merge(key, 1, Integer::sum);
+chm.computeIfAbsent(key, k -> load(k));
+\`\`\`
+
+**Use \`ConcurrentHashMap\`** for concurrent access. \`synchronizedMap\` is a legacy shim useful mainly to wrap a map type CHM can't (e.g. a \`LinkedHashMap\` for order).
+
+:::gotcha
+Neither makes **check-then-act** atomic across two calls. With CHM use \`putIfAbsent\`/\`compute\`/\`merge\`; with \`synchronizedMap\` hold the lock across the whole sequence.
+:::`,
+  },
+  {
+    id: 'conc-threadlocal',
+    question: 'What is ThreadLocal, when is it useful, and what is its leak risk?',
+    difficulty: 'Medium',
+    category: 'Concurrency',
+    tags: ['threadlocal', 'thread-safety', 'memory-leak'],
+    answer: `\`ThreadLocal<T>\` gives each thread its **own private copy** of a variable — no sharing, so no synchronization. Each thread's value is stored in a map keyed by the thread.
+
+Good uses: per-thread context that would be painful to thread through every method — a non-thread-safe \`SimpleDateFormat\`, the current user/request/tenant, or a transaction/\`EntityManager\`:
+
+\`\`\`java
+static final ThreadLocal<SimpleDateFormat> FMT =
+    ThreadLocal.withInitial(() -> new SimpleDateFormat("yyyy-MM-dd"));
+String s = FMT.get().format(date);   // each thread gets its own formatter
+\`\`\`
+
+:::gotcha
+On a **thread pool**, workers are reused, so a \`ThreadLocal\` value **survives into the next task** — leaking stale data (a security risk if it's user context) and pinning memory because the thread lives for the JVM's life. **Always \`remove()\` in a \`finally\`** at the end of the unit of work. (Virtual threads make heavy ThreadLocal use costly — prefer *scoped values* on Java 21+.)
+:::`,
+  },
+  {
+    id: 'conc-wait-notify',
+    question: 'How do wait/notify/notifyAll work, and why must wait be called in a loop?',
+    difficulty: 'Hard',
+    category: 'Concurrency',
+    tags: ['wait', 'notify', 'monitor', 'coordination'],
+    answer: `\`wait\`, \`notify\`, and \`notifyAll\` are defined on \`Object\` because **any object** can be a monitor. You may call them **only while holding that object's lock** (inside \`synchronized\`), or you get \`IllegalMonitorStateException\`.
+
+- \`wait()\` **atomically releases the lock** and parks the thread until it's notified (then it re-acquires the lock before returning).
+- \`notify()\` wakes **one** waiting thread; \`notifyAll()\` wakes all (safer — prefer it).
+
+Always wait inside a **\`while\` loop that re-checks the condition**:
+
+\`\`\`java
+synchronized (lock) {
+    while (queue.isEmpty()) {   // NOT if — re-check after waking
+        lock.wait();
+    }
+    return queue.remove();
+}
+\`\`\`
+
+:::gotcha
+Two reasons for the loop: **spurious wakeups** (a thread can wake without a notify), and with \`notifyAll\` another thread may have consumed the condition before you reacquire the lock. An \`if\` would proceed on a false condition. In modern code prefer \`BlockingQueue\`, \`Condition\`, or \`CountDownLatch\` over hand-rolled wait/notify.
+:::`,
+  },
+  {
+    id: 'conc-synchronized-mechanics',
+    question: 'How does the synchronized keyword actually work?',
+    difficulty: 'Medium',
+    category: 'Concurrency',
+    tags: ['synchronized', 'monitor', 'intrinsic-lock', 'reentrancy'],
+    answer: `Every Java object has an **intrinsic lock (monitor)**. \`synchronized\` acquires it on entry and releases it on exit, giving **mutual exclusion** and a **happens-before** edge (visibility of writes). *Which* object you lock matters:
+
+\`\`\`java
+synchronized void m() { }          // locks 'this' (the instance)
+static synchronized void s() { }    // locks the Class object (Foo.class)
+void n() { synchronized (lock) { } } // locks an explicit private object
+\`\`\`
+
+Key properties:
+- **Reentrant** — a thread already holding a monitor can re-enter another \`synchronized\` block on the same monitor (so a synchronized method can call another).
+- Instance lock and **class (static) lock are different locks** — they don't exclude each other.
+
+:::gotcha
+Never lock on something **shared or interned**: a \`String\` literal, a boxed \`Integer\` (cached), or a mutable field you reassign. The classic bugs are \`synchronized("lock")\` (every literal \`"lock"\` is the *same* interned object) and locking on a field that later changes to a different object. Use a \`private final Object lock = new Object();\`.
+:::`,
+  },
+  {
+    id: 'conc-synchronizers',
+    question: 'Compare CountDownLatch, CyclicBarrier, and Semaphore.',
+    difficulty: 'Hard',
+    category: 'Concurrency',
+    tags: ['countdownlatch', 'cyclicbarrier', 'semaphore', 'coordination'],
+    answer: `Three coordination primitives from \`java.util.concurrent\`, each for a different pattern:
+
+| Synchronizer | Purpose | Reusable? |
+|--------------|---------|-----------|
+| **CountDownLatch** | wait until N events complete (\`await\` blocks until \`countDown\` hits 0) | **no** (one-shot) |
+| **CyclicBarrier** | N threads wait for **each other**, then all proceed together | **yes** |
+| **Semaphore** | limit **concurrent access** to a resource via N permits | yes |
+
+\`\`\`java
+// Latch: main thread waits for 3 workers to finish
+CountDownLatch done = new CountDownLatch(3);
+// each worker: ... done.countDown();
+done.await();                       // unblocks when count == 0
+
+// Semaphore: at most 5 concurrent DB calls
+Semaphore permits = new Semaphore(5);
+permits.acquire(); try { callDb(); } finally { permits.release(); }
+\`\`\`
+
+Mnemonic: **latch** = "wait for others to *finish*", **barrier** = "wait for others to *arrive*", **semaphore** = "wait for a *permit*". (\`Phaser\` generalizes the barrier to multiple dynamic phases.)`,
+  },
+  {
+    id: 'conc-producer-consumer',
+    question: 'How do you implement the producer-consumer pattern safely?',
+    difficulty: 'Medium',
+    category: 'Concurrency',
+    tags: ['producer-consumer', 'blockingqueue', 'backpressure'],
+    answer: `Use a **\`BlockingQueue\`** — it handles all the locking and waiting for you. \`put()\` blocks when the queue is full; \`take()\` blocks when it's empty. No \`wait\`/\`notify\`, no missed signals:
+
+\`\`\`java
+BlockingQueue<Task> queue = new ArrayBlockingQueue<>(100);  // bounded
+
+// Producer
+queue.put(task);            // blocks if full -> natural backpressure
+
+// Consumer
+while (running) {
+    Task t = queue.take();  // blocks until an item is available
+    process(t);
+}
+\`\`\`
+
+A **bounded** queue is important: it applies **backpressure** so a fast producer can't exhaust memory. To stop consumers cleanly, enqueue a sentinel **"poison pill"** or interrupt them.
+
+:::senior
+Hand-rolling this with \`wait\`/\`notify\` is a rite of passage but error-prone (missed notifications, forgotten loop condition). In real code always reach for \`BlockingQueue\`, or an \`ExecutorService\` (which *is* a producer-consumer with a built-in queue and worker pool).
+:::`,
+  },
+  {
+    id: 'conc-race-condition',
+    question: 'What is a race condition, and what does thread-safe mean?',
+    difficulty: 'Easy',
+    category: 'Concurrency',
+    tags: ['race-condition', 'thread-safety', 'atomicity'],
+    answer: `A **race condition** is when a program's correctness depends on the **timing/interleaving** of threads touching shared mutable state. The two classic shapes are **read-modify-write** and **check-then-act**:
+
+\`\`\`java
+count++;   // NOT atomic: read count, add 1, write back — two threads can lose an update
+if (!map.containsKey(k)) map.put(k, v);   // check-then-act: both threads may put
+\`\`\`
+
+Two threads running \`count++\` a million times each can end well below two million.
+
+**Thread-safe** means a class behaves correctly under concurrent access **without** callers adding their own synchronization. Ways to get there:
+
+1. **No shared state** — confine data to one thread (stack/\`ThreadLocal\`).
+2. **Immutability** — an object that never changes has no races.
+3. **Synchronization** — \`synchronized\`, locks, or \`Atomic*\`/concurrent collections for shared mutable state.
+
+:::key
+Races need three ingredients: **shared** + **mutable** + **concurrent** state. Remove any one — don't share, don't mutate, or don't run concurrently — and the race is gone.
+:::`,
+  },
 ];
 
 export default questions;

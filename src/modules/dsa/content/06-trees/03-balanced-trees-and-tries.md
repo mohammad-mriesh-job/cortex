@@ -100,6 +100,46 @@ void insert(TrieNode root, String w) {
 }
 ```
 
+## Watch it: inserting a word that shares a prefix
+
+Insert `car` into a trie that already holds `cat`. The array below is the word being consumed —
+watch how the first two characters ride the **existing** path and only the last one allocates.
+
+```walkthrough
+title: Trie insert — "car" into a trie holding "cat"
+code: |
+  TrieNode n = root;
+  for (char c : w.toCharArray()) {
+    int i = c - 'a';
+    if (n.next[i] == null)
+      n.next[i] = new TrieNode();  // create the missing branch
+    n = n.next[i];                 // descend one level
+  }
+  n.isWord = true;                 // mark the complete word
+steps:
+  - text: 'Character `c`: the root already has a `c` branch (created by `cat`). No allocation — just descend.'
+    array: [c, a, r]
+    highlight: [0]
+    pointers: { 0: 'cur' }
+    line: 6
+  - text: 'Character `a`: also present on the shared `c → a` path. Descend again — still zero new nodes.'
+    array: [c, a, r]
+    sorted: [0]
+    highlight: [1]
+    pointers: { 1: 'cur' }
+    line: 6
+  - text: 'Character `r`: here the words diverge — `cat` went through `t`, so `next[r]` is **null**. Allocate one new node.'
+    array: [c, a, r]
+    sorted: [0, 1]
+    highlight: [2]
+    pointers: { 2: 'new' }
+    line: 5
+  - text: 'Mark the `r` node `isWord = true`. Total cost: 3 steps, **1 allocation** — `car` and `cat` share two-thirds of their storage. Insert is O(L) no matter how many words are stored.'
+    array: [c, a, r]
+    sorted: [0, 1, 2]
+    line: 8
+```
+
 The killer feature is **prefix queries**: "does any stored word start with `ca`?" is just a
 walk of 2 nodes — independent of how many words the trie holds. A hash set can test *whole-word*
 membership but cannot answer prefix questions without scanning everything.

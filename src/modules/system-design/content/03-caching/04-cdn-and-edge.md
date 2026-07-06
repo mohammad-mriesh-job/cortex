@@ -36,6 +36,8 @@ Each edge maintains its own cache, so the first user in a region "warms" the edg
 after them. Best for **static and cacheable content** — images, CSS/JS bundles, video segments,
 fonts — and increasingly for cacheable API responses and edge-computed HTML.
 
+Numbers to quote: an edge hit answers in **~10–30 ms** (nearby PoP) versus **~150–300 ms** for a cross-continent origin fetch — a 10x difference users feel. Well-configured CDNs offload **90–99% of static-asset requests** from the origin, and for video (the heaviest traffic on the internet) the CDN carries essentially **all** delivery bandwidth; the origin only ever serves each segment once per region per TTL.
+
 ## 2. A CDN request: hit vs miss
 
 The edge behaves like any cache: check locally, and on a miss fetch from origin, store it, then

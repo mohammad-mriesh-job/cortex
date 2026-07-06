@@ -26,11 +26,11 @@ The whole point of an index is turning **O(n)** into **O(log n)**.
 
 ```mermaid
 flowchart TD
-  Q["Query: WHERE email = ?"] --> D{"Usable index<br/>on email?"}
-  D -->|"No"| S["Full table scan<br/>read every row — O(n)"]
-  D -->|"Yes"| E{"Selective?<br/>matches few rows"}
-  E -->|"Yes, few rows"| I["Index seek<br/>descend the B-tree — O(log n)"]
-  E -->|"No, most rows"| S
+  Q["Query: WHERE email = ?"] --> D{"Usable index on email?"}
+  D -->|No| S["Full table scan — read every row, O(n)"]
+  D -->|Yes| E{"Selective — matches few rows?"}
+  E -->|"yes, few rows"| I["Index seek — descend the B-tree, O(log n)"]
+  E -->|"no, most rows"| S
 ```
 
 :::key
@@ -45,26 +45,24 @@ the **leaves** hold the sorted keys and a pointer to the actual row (or the row 
 
 ```mermaid
 flowchart TD
-  Root["ROOT&nbsp;&nbsp;·&nbsp;&nbsp;30 | 60 | 90"]
-  I0["&lt; 30"]
-  I1["INTERNAL&nbsp;·&nbsp;40 | 50"]
-  I2["60 – 90"]
-  I3["&gt; 90"]
-  L1["LEAF · 42 | 48"]
-  L2["LEAF · 52 | 55 | 57 | 59"]
-  Row["Table row&nbsp;→&nbsp;(id=57, name, …)"]
-  Root -->|"&lt; 30"| I0
-  Root -->|"30 ≤ 57 &lt; 60"| I1
-  Root -->|"60–90"| I2
-  Root -->|"&gt; 90"| I3
+  Root["ROOT: 30, 60, 90"]
+  I0["internal: keys below 30"]
+  I1["INTERNAL: 40, 50"]
+  I2["internal: keys 60 to 90"]
+  I3["internal: keys above 90"]
+  L1["LEAF: 42, 48"]
+  L2["LEAF: 52, 55, 57, 59"]
+  Row["Table row (id=57, name, ...)"]
+  Root -->|"57 is between 30 and 60"| I1
+  Root --> I0
+  Root --> I2
+  Root --> I3
   I1 --> L1
-  I1 -->|"57 ≥ 50"| L2
-  L2 -->|"scan → 57"| Row
-  class Root,I1,L2,Row hot;
-  classDef hot fill:#f8981d,stroke:#b56b00,color:#111,font-weight:bold;
+  I1 -->|"57 is at least 50"| L2
+  L2 -->|"scan leaf, hit 57"| Row
 ```
 
-The highlighted path is the route a seek for **57** takes: three node reads instead of
+The labelled edges trace the route a seek for **57** takes: three node reads instead of
 scanning the whole table. A B-tree stays **balanced** and **shallow** — even a billion rows
 is only ~4–5 levels deep, because each node fans out to hundreds of children.
 
@@ -139,6 +137,21 @@ the table *is* the B-tree, sorted by PK, so a PK seek needs **no** second hop �
 (InnoDB) or a physical address (heap-based engines). Knowing which one you have explains a lot
 of plan surprises.
 :::
+
+```flashcards
+title: Index mechanics recall
+cards:
+  - front: 'Complexity of a B-tree seek vs a full scan?'
+    back: '**O(log n)** vs **O(n)** — a million-row table is ~3–4 node reads via the tree.'
+  - front: 'Why is a B-tree so shallow even at a billion rows?'
+    back: 'Huge **fan-out** — each node holds hundreds of separator keys, so depth grows as log with base in the hundreds (~4–5 levels).'
+  - front: 'What is a **bookmark lookup**?'
+    back: 'The extra hop from a secondary-index leaf to the table to fetch columns the index doesn''t carry — one **random I/O per matched row**.'
+  - front: 'Clustered vs heap table — who uses which by default?'
+    back: '**InnoDB/SQL Server**: table stored as a B-tree on the PK (clustered). **PostgreSQL/Oracle**: heap tables; every index is secondary.'
+  - front: 'When does the planner *prefer* a full scan despite an index?'
+    back: 'When the predicate is **not selective** — reading most of the table sequentially beats millions of random bookmark lookups.'
+```
 
 ## Check yourself
 

@@ -127,6 +127,22 @@ You can fold null into the default with `case null, default -> ...`.
 If you do **not** write `case null`, a null selector still throws `NullPointerException` — the backward-compatible behavior. A type pattern like `case String s` never matches `null`.
 :::
 
+Putting it together, a pattern `switch` dispatches like this — null first, then each case top-to-bottom, then its guard:
+
+```mermaid
+flowchart TD
+    A["switch on obj"] --> B{"obj is null?"}
+    B -->|yes| C{"case null present?"}
+    C -->|yes| D["Run the null branch"]
+    C -->|no| E["Throw NullPointerException"]
+    B -->|no| F["Test cases top-to-bottom"]
+    F --> G{"Type pattern matches?"}
+    G -->|no| F
+    G -->|yes| H{"Guard when-clause true?"}
+    H -->|no| F
+    H -->|yes| I["Bind variables and run the branch"]
+```
+
 ## Sealed types enable exhaustive switches
 
 A `sealed` type enumerates all its permitted subtypes, so the compiler knows the complete set of possibilities:

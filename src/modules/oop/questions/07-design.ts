@@ -139,6 +139,190 @@ They're master gauges because most other principles are just tactics for improvi
 
 You want **high cohesion, low coupling**: classes that each do one thing well and know as little about each other as possible — which makes the system easy to understand, change, and reuse.`,
   },
+  {
+    id: 'oop-dsn-separation-of-concerns',
+    question: 'What is Separation of Concerns?',
+    difficulty: 'Easy',
+    category: 'OOP Design',
+    tags: ['separation of concerns', 'modularity'],
+    answer: `**Separation of Concerns (SoC)** means splitting a system so each part handles **one distinct aspect** — persistence, validation, presentation, business logic — with minimal overlap.
+
+You achieve it through layers, modules, MVC, and classes with single responsibilities. The payoff: you can understand or change one concern without disturbing the others, reuse parts independently, and let teams work in parallel.
+
+\`\`\`java
+// Mixed concerns — SQL, formatting, and rules tangled in one method (bad)
+// Separated — Repository (data), Service (rules), View (formatting)
+\`\`\`
+
+:::key
+SoC is the **general principle**; SRP (at the class level), layered architecture, and MVC are specific ways to apply it. High cohesion and low coupling are what it produces.
+:::`,
+  },
+  {
+    id: 'oop-dsn-kiss',
+    question: 'What is the KISS principle?',
+    difficulty: 'Easy',
+    category: 'OOP Design',
+    tags: ['kiss', 'simplicity', 'yagni'],
+    answer: `**KISS — "Keep It Simple, Stupid":** prefer the simplest design that actually solves the problem; every bit of complexity must earn its place. Simple code is easier to read, test, debug, and change.
+
+KISS pushes back on clever abstractions, premature generalisation, and "pattern soup." It pairs with **YAGNI** (don't build what you don't yet need) and opposes gold-plating.
+
+:::gotcha
+"Simple" is **not** "fewest lines." A dense one-liner can be *less* simple than five clear statements. Simple means **easy to understand and change** — optimise for the reader, not the character count.
+:::`,
+  },
+  {
+    id: 'oop-dsn-composition-root',
+    question: 'What is a composition root?',
+    difficulty: 'Easy',
+    category: 'OOP Design',
+    tags: ['composition root', 'dependency injection', 'wiring'],
+    answer: `The **composition root** is the single place — near the application entry point (\`main\`, or a DI container's config) — where the object graph is **assembled**: where concrete implementations are created and dependencies wired together.
+
+\`\`\`java
+public static void main(String[] args) {
+  var repo    = new JpaOrderRepository(dataSource);   // choose concretes HERE
+  var mailer  = new SmtpMailer(config);
+  var service = new OrderService(repo, mailer);       // wire them
+  new Api(service).start();
+}
+\`\`\`
+
+Everywhere else depends only on **abstractions** and receives collaborators by injection.
+
+:::tip
+Only the composition root should know about concrete classes and \`new\`. Keep wiring in one spot and the rest of the system stays decoupled and testable — with or without a framework.
+:::`,
+  },
+  {
+    id: 'oop-dsn-interface-first',
+    question: 'What does "interface-first" (outside-in) design mean, and why do it?',
+    difficulty: 'Medium',
+    category: 'OOP Design',
+    tags: ['interface-first', 'design by contract', 'isp'],
+    answer: `**Interface-first** design means defining the **abstraction a client needs — from the caller's point of view — before** writing any implementation. You ask *"what's the smallest, clearest API that makes the call site read well?"*, then build behind it.
+
+\`\`\`java
+// Design the call you WISH existed first...
+BigDecimal total = pricing.quote(cart, customer);
+// ...then define the interface it implies, then implement it.
+interface Pricing { BigDecimal quote(Cart cart, Customer c); }
+\`\`\`
+
+Benefits: it forces you to think about **usage and responsibility** up front, decouples client from implementation, enables TDD with mocks, and naturally keeps interfaces **small** (ISP).
+
+:::senior
+Writing the call site first is the trick: the interface *falls out of how it's used*, not out of how it happens to be implemented — which is how leaky APIs are born.
+:::`,
+  },
+  {
+    id: 'oop-dsn-testability',
+    question: 'How do you design code to be testable?',
+    difficulty: 'Medium',
+    category: 'OOP Design',
+    tags: ['testability', 'seams', 'dependency injection'],
+    answer: `Testable code lets you drive a unit with controlled inputs and observe its outputs in isolation. Techniques:
+
+1. **Dependency injection** — pass collaborators in so tests can substitute fakes/mocks.
+2. **Program to interfaces** — create **seams** (points where behaviour can be swapped without editing the code).
+3. **Avoid hidden dependencies** — no static/global state, no \`new\`-ing dependencies deep inside methods, no \`Instant.now()\`/\`getInstance()\` buried in logic.
+4. **Separate pure logic from I/O** — a functional core (easy to test) inside an imperative shell.
+
+\`\`\`java
+// Injected clock — tests control time; contrast with a hidden Instant.now()
+Receipt charge(Order o, Clock clock) { ... }
+\`\`\`
+
+:::key
+If something is hard to test, it's usually too **coupled**. Testability pressure is a design smell detector — fixing it (injecting a dependency, extracting pure logic) improves the design itself.
+:::`,
+  },
+  {
+    id: 'oop-dsn-di-styles',
+    question: 'What are the three styles of dependency injection, and which is preferred?',
+    difficulty: 'Medium',
+    category: 'OOP Design',
+    tags: ['dependency injection', 'constructor injection', 'testability'],
+    answer: `| Style | How | Notes |
+|--|--|--|
+| **Constructor** | dependencies as constructor params | **preferred** — explicit, object always valid, fields can be \`final\` |
+| **Setter** | \`setX(dep)\` after construction | for optional / reconfigurable deps; risks half-built objects |
+| **Field** | framework sets private fields (\`@Autowired\`) | concise, but hides deps and can't be \`final\` |
+
+\`\`\`java
+class OrderService {
+  private final Repo repo;
+  OrderService(Repo repo) { this.repo = repo; }   // constructor injection
+}
+\`\`\`
+
+**Prefer constructor injection:** it makes dependencies visible in the signature, enforces required ones, and keeps objects immutable.
+
+:::gotcha
+Field injection looks clean but you can't instantiate the class in a plain unit test without reflection or the container — a classic testability smell hiding as tidiness.
+:::`,
+  },
+  {
+    id: 'oop-dsn-grasp-overview',
+    question: 'What are the GRASP principles, and how do they relate to SOLID?',
+    difficulty: 'Medium',
+    category: 'OOP Design',
+    tags: ['grasp', 'responsibility', 'solid'],
+    answer: `**GRASP** — General Responsibility Assignment Software Patterns (Craig Larman) — is a set of nine principles for the hardest OO question: **which class gets which responsibility?** The core ones:
+
+- **Information Expert** — give a responsibility to the class that has the data.
+- **Creator** — the class that contains/aggregates B should create B.
+- **Controller** — route system events through a coordinating class.
+- **Low Coupling / High Cohesion** — the master gauges.
+- **Polymorphism** — vary behaviour by type via dispatch, not conditionals.
+- **Indirection / Pure Fabrication / Protected Variations** — decouple via intermediaries and stable abstractions.
+
+:::tip
+GRASP answers *"where does this method belong?"* (responsibility assignment); SOLID answers *"is this design healthy?"* (principle-level quality). They're complementary — GRASP is often where good design decisions actually start.
+:::`,
+  },
+  {
+    id: 'oop-dsn-api-design',
+    question: 'What makes a good API?',
+    difficulty: 'Medium',
+    category: 'OOP Design',
+    tags: ['api design', 'effective java', 'usability'],
+    answer: `The single best heuristic (Bloch): **make it easy to use correctly and hard to use incorrectly.** Practically:
+
+1. **Minimal and focused** — when in doubt, leave it out. You can add later; you can't remove without breaking callers.
+2. **Clear, consistent names** and predictable behaviour.
+3. **Fail fast** — validate arguments and throw early; return \`Optional\`, not \`null\`.
+4. **Make illegal states unrepresentable** — encode constraints in *types*, not just docs.
+5. **Don't leak implementation** — return interfaces, hide concrete types, keep the surface small.
+
+\`\`\`java
+Duration.ofSeconds(30);   // named, hard to misuse — vs a bare 'new Duration(30, SECONDS)'
+\`\`\`
+
+:::senior
+A small surface is a feature: less to learn, less to misuse, less to maintain and never able to remove. Design the API for the *caller*, and treat every public method as a permanent promise.
+:::`,
+  },
+  {
+    id: 'oop-dsn-leaky-abstraction',
+    question: 'What is the Law of Leaky Abstractions?',
+    difficulty: 'Hard',
+    category: 'OOP Design',
+    tags: ['leaky abstraction', 'complexity', 'senior'],
+    answer: `Joel Spolsky's law: *"All non-trivial abstractions, to some degree, are **leaky**."* An abstraction hides the complexity beneath it — until an edge case forces those details back through.
+
+Examples:
+- An **ORM** hides SQL until an N+1 query or a lock forces you to understand the database.
+- **TCP** hides packet loss until latency and retransmits make it visible.
+- A **network file path** looks local until the connection drops.
+
+The consequence: abstractions save enormous time, but they don't excuse you from understanding what's underneath. When one leaks, you must drop to the lower layer to debug it.
+
+:::senior
+This is why "just use the framework/ORM" bites at scale, and why a strong engineer understands the layer **beneath** the one they work in. Good abstractions aren't leak-free — their leaks are just **rare and well-understood**.
+:::`,
+  },
 ];
 
 export default questions;

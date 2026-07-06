@@ -94,6 +94,34 @@ Code coverage (JaCoCo) measures *which lines executed*, not *whether you asserte
 **High coverage is necessary-ish, never sufficient.** Chasing a 100% target produces assertion-free "coverage theatre" and tests of trivial code. Treat coverage as a tool to find *untested* areas, not a quality score. **Mutation testing** (e.g. PITest) is the stronger signal: it deliberately introduces bugs and checks your tests *catch* them.
 :::
 
+## Check yourself
+
+```quiz
+title: Testing best practices
+questions:
+  - q: 'What does the test pyramid recommend?'
+    options:
+      - text: 'Many fast unit tests, fewer integration tests, few slow end-to-end tests'
+        correct: true
+      - 'Mostly end-to-end tests, for realism'
+      - 'Equal numbers at every level'
+    explain: 'Cost and run time grow as you climb, so the count should shrink. The inverted "ice-cream cone" (mostly E2E) gives slow, flaky feedback that rarely pinpoints the bug.'
+  - q: 'Why is a test that asserts "the service called `repo.save()` then `repo.flush()`" often fragile?'
+    options:
+      - text: 'It couples to *implementation*, so it breaks on a refactor even when the observable result is unchanged'
+        correct: true
+      - 'Mockito cannot verify two calls in order'
+      - '`flush()` is not verifiable'
+    explain: 'Interaction-heavy tests punish the refactoring they are meant to enable. Assert on outcomes (return values, state, published events) where you can; reserve interaction verification for genuine boundaries you cannot otherwise observe.'
+  - q: 'What does 100% line coverage guarantee about a test suite?'
+    options:
+      - text: 'Only that every line executed — not that any meaningful assertion was made'
+        correct: true
+      - 'That the code is bug-free'
+      - 'That every branch and edge case is tested'
+    explain: 'A test can execute a line and assert nothing, still showing green. Coverage finds *untested* areas; it is not a quality score. Mutation testing (PITest) is the stronger signal — it checks your tests actually *catch* injected bugs.'
+```
+
 :::key
 Build a **test pyramid** (many unit, few E2E), structure tests as **Arrange-Act-Assert**, and keep them **FIRST** (Fast, Independent, Repeatable, Self-validating, Timely). **TDD** = Red-Green-Refactor. Test **behaviour and contracts**, not private internals or trivial getters; add a regression test for every bug. Know the double taxonomy (dummy/stub/spy/mock/fake). And remember coverage shows execution, not correctness — mutation testing is the truer measure.
 :::

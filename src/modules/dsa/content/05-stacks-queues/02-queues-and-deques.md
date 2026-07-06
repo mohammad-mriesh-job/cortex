@@ -67,7 +67,16 @@ On a fixed array you would "run off the end" even with room at the start. The fi
 ## The circular queue (ring buffer)
 
 Wrap the indices around with **modulo** so freed slots at the front get reused. The array behaves
-like a ring: after the last index, you come back to 0.
+like a ring: after the last index, you come back to 0. `front` and `rear` chase each other around
+it forever — no slot is ever abandoned.
+
+```mermaid
+flowchart LR
+  S0["slot 0"] --> S1["slot 1"]
+  S1 --> S2["slot 2"]
+  S2 --> S3["slot 3"]
+  S3 -->|"modulo wrap: index % cap"| S0
+```
 
 ```java
 class CircularQueue {

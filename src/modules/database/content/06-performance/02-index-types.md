@@ -23,6 +23,31 @@ Not every index is a B-tree, and not every index helps every query. Here's the f
 | **Unique** | B-tree + uniqueness constraint | enforce no duplicates, speed lookups | store duplicates |
 | **Full-text** | inverted index | word/phrase search in documents | numeric ranges, sorting |
 
+The decision is driven by the **predicate shape**, not the data type:
+
+```mermaid
+flowchart TD
+  P{"What does the query do with the column?"} -->|"word or phrase search"| FT["Full-text inverted index"]
+  P -->|"filter or sort"| E{"Equality only, never ranges or ORDER BY?"}
+  E -->|Yes| H["Hash index (Postgres) — else B-tree still fine"]
+  E -->|No| M{"Filter on several columns together?"}
+  M -->|Yes| C["Composite B-tree — most-filtered column first, range column last"]
+  M -->|No| B["Single-column B-tree"]
+  C --> S{"Query only ever hits a small fixed subset?"}
+  B --> S
+  S -->|Yes| PF["Add WHERE clause — partial index"]
+  S -->|No| CV{"Index could serve every selected column?"}
+  CV -->|Yes| IO["Add INCLUDE columns — covering index"]
+  CV -->|No| DONE["Ship it and check the plan"]
+```
+
+:::gotcha
+In MySQL/InnoDB you can't choose hash: `CREATE INDEX ... USING HASH` on an InnoDB table is
+silently ignored and you get a B-tree anyway (only MEMORY tables honour it). PostgreSQL has
+real hash indexes — WAL-logged and crash-safe since v10 — but a B-tree on the same column is
+usually within a few percent, which is why B-tree stays the default answer.
+:::
+
 ```flashcards
 title: Pick the right index
 cards:
@@ -62,17 +87,17 @@ steps:
     array: ['1,A', '1,B', '2,A', '2,C', '3,B', '3,C']
     highlight: [2, 3]
     pointers: { 2: 'a=2' }
-    line: 3
+    line: 2
   - text: '**Q2 `WHERE a = 2 AND b = ''C''`** ✅ — the prefix narrows to a single entry. Best case.'
     array: ['1,A', '1,B', '2,A', '2,C', '3,B', '3,C']
     highlight: [3]
     pointers: { 3: 'exact' }
-    line: 4
+    line: 3
   - text: '**Q3 `WHERE b = ''C''`** ❌ — `b=''C''` rows are **scattered** (index 3 and 5). No contiguous range → the index can''t seek; the engine scans.'
     array: ['1,A', '1,B', '2,A', '2,C', '3,B', '3,C']
     highlight: [3, 5]
     pointers: { 3: 'b=C', 5: 'b=C' }
-    line: 5
+    line: 4
 ```
 
 :::key

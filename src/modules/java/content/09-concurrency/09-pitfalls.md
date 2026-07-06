@@ -105,6 +105,45 @@ flowchart TD
 The cheapest concurrency bug is the one you never create. Favour **immutability** and confinement (no shared mutable state, no bug); prefer **higher-level constructs** (`ExecutorService`, concurrent collections, `CompletableFuture`) over hand-rolled locks; keep critical sections tiny; and acquire multiple locks in a single documented order. For diagnosis beyond thread dumps, **Java Flight Recorder** captures lock contention and thread events with negligible overhead, and tools like async-profiler reveal lock hotspots.
 :::
 
+## Check yourself
+
+```quiz
+title: 'Failure modes'
+questions:
+  - q: 'Two threads repeatedly `tryLock`, fail, release everything, and immediately retry — forever, at 100% CPU. Which failure mode is this?'
+    options:
+      - 'Deadlock — they are stuck waiting for each other.'
+      - text: '**Livelock** — both threads are active and responding to each other but make no progress; add randomised back-off to break the symmetry.'
+        correct: true
+      - 'Starvation — the scheduler ignores them.'
+      - 'A visibility bug.'
+    explain: 'In deadlock, threads are BLOCKED/WAITING (0% CPU). In livelock they keep *running* — retrying in lock-step so both always fail. Randomised back-off (like Ethernet collision handling) desynchronises them.'
+  - q: 'Which single change makes deadlock **impossible** in code that takes two account locks?'
+    options:
+      - 'Making both methods `synchronized`.'
+      - text: 'Always acquiring the two locks in a globally consistent order (e.g. lower account id first) — this destroys the *circular wait* condition.'
+        correct: true
+      - 'Adding `volatile` to both balances.'
+      - 'Using daemon threads for transfers.'
+    explain: 'Deadlock requires all four Coffman conditions simultaneously. A total lock order makes a cycle of waiting-for edges impossible, so breaking that one condition is a complete proof of deadlock freedom.'
+  - q: 'Production JVM appears frozen. What is the first diagnostic step?'
+    options:
+      - 'Restart it and watch whether it happens again.'
+      - text: 'Capture a thread dump (`jstack <pid>` / `jcmd <pid> Thread.print`) — the JVM detects and prints Java-level deadlock cycles, and the dump shows who owns and who waits on each monitor.'
+        correct: true
+      - 'Attach a debugger and step through each thread.'
+      - 'Increase the heap size.'
+    explain: 'A thread dump is cheap, non-destructive, and often conclusive: "Found one Java-level deadlock" names the exact threads and locks. Restarting destroys the evidence; a debugger changes the timing that caused the bug.'
+  - q: 'Why do race conditions so often pass tests and code review, then fail in production?'
+    options:
+      - 'Test frameworks disable threading.'
+      - text: 'They are timing-dependent: a debugger or lightly-loaded laptop serialises the interleavings, while a many-core box under load explores the rare orderings that lose updates.'
+        correct: true
+      - 'The JIT removes them after enough warm-up.'
+      - 'Production JVMs use a different memory model.'
+    explain: 'The buggy interleaving may occur once in millions of runs. That is why concurrency correctness must be *reasoned* about (happens-before, invariants, immutability) rather than established by testing.'
+```
+
 :::key
 Deadlock needs all **four Coffman conditions** (mutual exclusion, hold-and-wait, no preemption, circular wait) — break one, usually via **consistent lock ordering** or `tryLock`. **Livelock** = busy but no progress (add back-off); **starvation** = perpetually denied (use fairness). **Races** come from check-then-act/read-modify-write; **visibility bugs** from missing happens-before. Capture a **thread dump** (`jstack`/`jcmd`) to find deadlocks and contention — and prevent bugs up front with immutability and high-level concurrency tools.
 :::

@@ -8,9 +8,12 @@ summary: Produce families of related objects through one interface — guarantee
 tags: abstract factory, creational, design patterns, product family
 ---
 
-**Abstract Factory** provides an interface for creating **families of related products** without
-naming their concrete classes. One factory yields a whole matching set — so you never accidentally
-pair a Windows button with a macOS checkbox.
+Picture a cross-platform UI where someone constructs a `WinButton` next to a `MacCheckbox`: it
+compiles fine and looks broken at runtime. When products come in **families that must match** —
+per-OS widgets, per-vendor JDBC objects, per-theme components — scattering `new` calls around the
+codebase makes mixed families inevitable. **Abstract Factory** provides an interface for creating
+**families of related products** without naming their concrete classes. One factory yields a whole
+matching set — pick the factory once, and every product it makes is guaranteed consistent.
 
 ## Structure
 
@@ -84,18 +87,42 @@ Abstract Factory is frequently **implemented using** Factory Methods — each `c
 factory method. They compose rather than compete.
 :::
 
-## Real JDK examples
+Selecting the family happens **once**, at the composition root:
+
+```java
+GUIFactory factory = System.getProperty("os.name").startsWith("Mac")
+    ? new MacFactory()
+    : new WinFactory();
+buildUI(factory);          // everything downstream is family-consistent
+```
+
+## Real JDK and framework examples
 
 - `DocumentBuilderFactory` / `SAXParserFactory` — `newInstance()` returns a factory whose
   `newDocumentBuilder()` produces matching parser objects.
-- `javax.xml.transform.TransformerFactory`.
-- `java.sql.Connection` — creates matching `Statement`, `PreparedStatement`, and `CallableStatement`
-  objects that all belong to the same driver family.
+- `javax.xml.transform.TransformerFactory` — same shape for XSLT machinery.
+- **`java.sql.Connection`** — creates matching `Statement`, `PreparedStatement`, and
+  `CallableStatement` objects that all belong to the same driver family. Swap the JDBC URL from
+  Postgres to MySQL and one factory switch changes the entire object family.
+- **Spring's `BeanFactory`/`ApplicationContext`** is a giant abstract factory: you ask for beans by
+  type and never name construction details; profiles switch whole families (test vs prod wiring).
+
+## When NOT to use it
+
+- **Products don't actually come in families.** If nothing must "match", plain factory methods or
+  constructors are enough — an abstract factory with one implementation is pure ceremony.
+- **The family axis never changes.** One platform, one vendor, forever? The interface earns nothing.
+- **You have a DI container.** Profiles/qualifiers already select consistent object families;
+  hand-rolling a parallel factory layer duplicates the container's job.
+
+The over-engineering tell: `AbstractWidgetFactory` → `DefaultWidgetFactory` (the only
+implementation) → used in one place. That is three files standing between the reader and `new`.
 
 :::gotcha
 Abstract Factory locks the **set of products** at design time. Adding a *new product type* (say a
 `Slider`) forces a change to the factory interface and **every** implementation — painful. It is
-easy to add a new *family*, hard to add a new *product*.
+easy to add a new *family*, hard to add a new *product*. Invert of Visitor: there it is easy to add
+operations, hard to add element types — interviewers like pairing these two.
 :::
 
 ## Check yourself

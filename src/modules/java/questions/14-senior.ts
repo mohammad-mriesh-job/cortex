@@ -215,6 +215,272 @@ Rate limiting is fundamentally **load shedding** — protecting the system matte
 CAP is a coarse lens. In practice prefer **PACELC**: *if Partition then A-vs-C, Else (normal operation) Latency-vs-Consistency.* Most of the time there is no partition, and you're really trading latency against consistency — which is the choice you actually live with day to day.
 :::`,
   },
+  {
+    id: 'senior-effective-java-static-factory',
+    question: 'When would you prefer a static factory method over a public constructor?',
+    difficulty: 'Medium',
+    category: 'Senior & Design',
+    tags: ['effective-java', 'api-design', 'factory'],
+    answer: `A **static factory method** is a static method that returns an instance of the class (\`List.of()\`, \`Optional.of()\`, \`Integer.valueOf()\`). *Effective Java* Item 1 says to consider one over a plain constructor because it offers four things a constructor cannot:
+
+1. **It has a name.** \`BigInteger.probablePrime(bits, rnd)\` says what it does, and you can offer several factories with the same parameter types (a constructor can't).
+2. **It need not create a new object.** It can return a cached instance — \`Integer.valueOf\` and \`Boolean.valueOf\` reuse values — enabling singletons and flyweights (instance control).
+3. **It can return any subtype.** Return an interface and hide the concrete class, so the implementation can change freely (\`EnumSet.of\` returns a different class for small vs large enums).
+4. **The returned type can vary by the arguments.**
+
+\`\`\`java
+public static Money of(long cents) { return new Money(cents); }  // named, can cache, can hide the subtype
+\`\`\`
+
+:::gotcha
+A class with only static factories and a private constructor **can't be subclassed**, and factories are less discoverable than constructors. Follow the naming conventions callers expect: \`of\`, \`valueOf\`, \`from\`, \`getInstance\`, \`create\`.
+:::`,
+  },
+  {
+    id: 'senior-program-to-interfaces',
+    question: 'What does "program to an interface, not an implementation" mean in practice?',
+    difficulty: 'Easy',
+    category: 'Senior & Design',
+    tags: ['api-design', 'abstraction', 'coupling'],
+    answer: `Declare variables, parameters, and return types with the most general **interface** that still gives callers what they need — \`List\`, not \`ArrayList\`; \`Map\`, not \`HashMap\`. Your code then depends on *behaviour*, not a concrete class.
+
+\`\`\`java
+public List<String> names() { return new ArrayList<>(); }   // good: callers decoupled from the impl
+public ArrayList<String> names2() { /* ... */ }             // leaky: return type locks you to ArrayList
+\`\`\`
+
+Benefits: swap implementations without touching callers, mock the interface in tests, and keep coupling low.
+
+:::gotcha
+"Most general that suffices" — not "most abstract possible". If clients need index access, return \`List\`, not \`Collection\`; if insertion order is part of the contract, that guarantee must survive. Pick the least specific type that still exposes the behaviour clients rely on, and use a concrete type deliberately when you need its specific contract (e.g. \`ArrayDeque\` as a stack).
+:::`,
+  },
+  {
+    id: 'senior-api-minimal-surface',
+    question: 'What principles guide the design of a good public API or class?',
+    difficulty: 'Hard',
+    category: 'Senior & Design',
+    tags: ['api-design', 'effective-java', 'encapsulation'],
+    answer: `The guiding rule: **make it easy to use correctly and hard to use incorrectly.**
+
+- **Minimize the public surface.** Every public method and field is a permanent commitment. When in doubt, leave it out — you can always add later, but you can almost never remove without breaking callers.
+- **Fail fast.** Validate parameters at the boundary (\`Objects.requireNonNull\`, range checks) so a bad call throws at the call site, not as a mysterious NPE three layers down.
+- **Prefer immutability**, and make **defensive copies** of mutable inputs/outputs so callers can't reach in and corrupt your invariants.
+- **Don't leak internals** — return interfaces, never your live backing collection.
+- **Least astonishment** — consistent names and behaviour, and honour the \`equals\`/\`hashCode\` contracts.
+
+\`\`\`java
+public Range(int lo, int hi) {
+    if (lo > hi) throw new IllegalArgumentException("lo > hi");  // fail fast
+    this.lo = lo; this.hi = hi;                                  // immutable
+}
+\`\`\`
+
+:::senior
+Keep the API small *now* so you can grow it later. A tight, immutable, well-validated surface is the one you can evolve; a wide one calcifies because every method is already something a client depends on.
+:::`,
+  },
+  {
+    id: 'senior-backward-compatible-api',
+    question: 'How do you evolve a public API or library without breaking existing callers?',
+    difficulty: 'Hard',
+    category: 'Senior & Design',
+    tags: ['api-design', 'compatibility', 'versioning'],
+    answer: `Distinguish **source compatibility** (their code still compiles) from **binary compatibility** (their already-compiled \`.jar\` still links without recompiling). Both matter for a published library.
+
+| Change | Safe? |
+|---|---|
+| Add a new method / overload | Yes |
+| Add a method to an **interface** | **No** — breaks implementers, unless it's a \`default\` method |
+| Remove or rename a public method | No |
+| Change a parameter or return type | No — it's a new signature, old callers break |
+| Reorder / rename \`enum\` constants | No — breaks persisted values and \`switch\` |
+
+Rules of thumb: **add, don't change or remove.** Introduce new behaviour as new overloads; extend interfaces via \`default\` methods. Deprecate the old path with \`@Deprecated(since="…", forRemoval=true)\` and keep it working for a release cycle with a migration note. Follow **SemVer** — breaking changes only in a major version.
+
+:::gotcha
+Adding a parameter isn't "changing" a method — it's a *new overload*, and the old signature must stay or you break binary compatibility. Likewise, treat public enums and serialized forms as part of the contract: they're the changes teams forget.
+:::`,
+  },
+  {
+    id: 'senior-error-handling-strategy',
+    question: 'How do you decide whether a method signals failure with an exception, an Optional, or a Result type?',
+    difficulty: 'Hard',
+    category: 'Senior & Design',
+    tags: ['error-handling', 'optional', 'api-design'],
+    answer: `Match the mechanism to whether the outcome is **exceptional** or **expected**.
+
+| Mechanism | Use when | Example |
+|---|---|---|
+| **Exception** | truly exceptional or a bug; caller usually can't continue | \`IllegalArgumentException\`, \`IOException\` |
+| **Optional<T>** (return only) | a value may legitimately be **absent**, with no "why" | \`findById\`, a lookup miss |
+| **Result / sealed type** | an **expected domain failure** the caller must handle, with a reason | validation, parsing, payment declined |
+
+Guidance: use **unchecked** exceptions for programming errors (\`IllegalState\`/\`IllegalArgument\`), **checked** only when the caller can realistically recover. Don't use exceptions for normal control flow — they're costly and obscure it. Don't use \`Optional\` for fields or parameters, or to hide an error whose *cause* the caller needs.
+
+\`\`\`java
+sealed interface ParseResult permits Ok, Err {}
+record Ok(int value) implements ParseResult {}
+record Err(String reason) implements ParseResult {}
+\`\`\`
+
+:::senior
+A sealed \`Result\` plus an exhaustive \`switch\` makes the compiler enforce that every failure is handled — expected errors become checked control flow instead of exceptions thrown past unsuspecting callers.
+:::`,
+  },
+  {
+    id: 'senior-testability-seams',
+    question: 'How do you design code so that it is easy to unit-test?',
+    difficulty: 'Medium',
+    category: 'Senior & Design',
+    tags: ['testing', 'dependency-injection', 'design'],
+    answer: `Testable code is mostly **well-decoupled** code — if something is hard to test, that's design feedback.
+
+- **Inject dependencies** (via the constructor) instead of \`new\`-ing collaborators or reaching for static singletons inside your logic — tests can then pass fakes or mocks.
+- **Introduce seams** around what you can't control: I/O, the network, time, and randomness. Inject a \`Clock\` instead of calling \`Instant.now()\`, and a supplier/\`Random\` instead of \`Math.random()\`, so behaviour is deterministic.
+- **Separate pure logic from side effects.** A pure function of input → output needs no mocks at all.
+- **Avoid static, global, mutable state** — it bleeds between tests and forces awkward ordering.
+
+\`\`\`java
+class TokenService {
+  private final Clock clock;
+  TokenService(Clock clock) { this.clock = clock; }        // test injects Clock.fixed(...)
+  boolean expired(Token t) { return t.expiry().isBefore(clock.instant()); }
+}
+\`\`\`
+
+:::gotcha
+If you need PowerMock to stub a \`static\`, a constructor, or \`System.currentTimeMillis()\`, the untestable call *is* the design smell. Refactor it into an injectable seam rather than reaching for a heavier mocking tool.
+:::`,
+  },
+  {
+    id: 'senior-premature-optimization',
+    question: '"Premature optimization is the root of all evil" — how do you actually approach performance work?',
+    difficulty: 'Medium',
+    category: 'Senior & Design',
+    tags: ['performance', 'profiling', 'methodology'],
+    answer: `Optimize from **measurement, not intuition** — developers are famously bad at guessing where time goes. A disciplined loop:
+
+1. **Set a target** — a latency/throughput SLO. Without a goal you can't know when to stop.
+2. **Profile under realistic load** (async-profiler, JFR) to find the *actual* hot path.
+3. **Apply Amdahl's law** — speeding up code that's 5% of runtime caps your gain at ~5%. Attack the dominant cost first, usually I/O, N+1 queries, allocation, or serialization — rarely raw CPU.
+4. **Optimize, then re-measure** to confirm the win and catch regressions.
+
+Keep code clear first; constant-factor micro-tweaks that hurt readability rarely pay off, while an algorithmic fix (O(n²) → O(n)) or removing redundant round-trips dwarfs them.
+
+:::senior
+The biggest wins are usually **architectural** — caching, batching, doing less work — not clever inner loops. And always confirm against the **whole system**: a green microbenchmark can "prove" a speedup on a path that was never your bottleneck.
+:::`,
+  },
+  {
+    id: 'senior-reading-gc-logs',
+    question: 'How do you tell whether an application has a garbage-collection problem?',
+    difficulty: 'Hard',
+    category: 'Senior & Design',
+    tags: ['jvm', 'gc', 'performance'],
+    answer: `Turn on unified GC logging (\`-Xlog:gc*\`) and read three signals:
+
+1. **Pause times** — how long each stop-the-world pause lasts. Multi-hundred-millisecond pauses wreck tail latency; if the SLA is tight, the heap may be too large for the collector, or you need a low-pause collector (**G1**, **ZGC**, **Shenandoah**).
+2. **GC frequency / allocation rate** — very frequent young collections mean you're filling Eden fast. A high allocation rate is a code problem; cutting allocation on hot paths beats any flag.
+3. **Post-GC old-gen occupancy trend** — the live heap *after* each full GC. Flat is healthy; **steadily climbing** toward the ceiling is a **memory leak**, ending in back-to-back full GCs ("GC thrash", where the app burns most of its CPU collecting) and finally \`OutOfMemoryError\`.
+
+Also watch **throughput %** (time in the app vs GC) and the promotion rate into old gen.
+
+:::senior
+Don't tune flags blindly. First decide **throughput vs latency**, then right-size the heap. Most "GC problems" are really an **allocation** or **leak** problem in disguise — fix the code, not just \`-Xmx\`.
+:::`,
+  },
+  {
+    id: 'senior-low-coupling',
+    question: 'How do you keep coupling low between classes and modules?',
+    difficulty: 'Medium',
+    category: 'Senior & Design',
+    tags: ['coupling', 'cohesion', 'architecture'],
+    answer: `Aim for **high cohesion** (a unit does one thing) and **low coupling** (few, stable dependencies). Practical moves:
+
+- **Depend on abstractions, not concretions** (Dependency Inversion) — code against interfaces so implementations swap freely.
+- **Keep the public surface small** — hide internals with encapsulation and package-private types.
+- **Obey the Law of Demeter** — talk to immediate collaborators, not \`a.getB().getC().doIt()\`; a "train wreck" couples you to a whole object graph.
+- **Inject dependencies inward** instead of reaching out to static singletons or global state.
+- **Forbid cyclic dependencies** between packages/modules — dependencies should point one way, toward stable abstractions.
+- **Decouple with events/messages** so producers don't know their consumers.
+
+Loosely coupled code is independently testable, deployable, and changeable — a change stays local instead of rippling across the system.
+
+:::senior
+Coupling, not lines of code, is what makes big systems hard to change. Make it visible — measure fan-in/fan-out and package cycles — and treat a dependency cycle between modules as a design bug to break, not tolerate.
+:::`,
+  },
+  {
+    id: 'senior-defensive-vs-contracts',
+    question: 'Defensive programming vs design by contract — where should a method validate its inputs?',
+    difficulty: 'Medium',
+    category: 'Senior & Design',
+    tags: ['defensive-programming', 'contracts', 'validation'],
+    answer: `**Design by contract** frames each method as preconditions (the caller's job), postconditions, and invariants. **Defensive programming** distrusts inputs and checks them. The senior move is to apply each in the right place.
+
+- **Validate hard at trust boundaries** — any public API or code taking external/untrusted input (HTTP, files, another service). You can't trust the caller, so reject bad input loudly: \`Objects.requireNonNull\`, range checks, \`IllegalArgumentException\`.
+- **Inside your own module, prefer contracts** over re-checking the same argument at every private layer — that noise obscures logic and hides where the bad value entered.
+- **Fail fast at the boundary** so the stack trace points at the culprit, not a distant NPE.
+
+\`\`\`java
+Order(Customer c, List<Item> items) {
+  this.customer = Objects.requireNonNull(c, "customer");   // boundary check, always runs
+  this.items = List.copyOf(items);                         // rejects nulls + defensive copy
+}
+\`\`\`
+
+:::gotcha
+\`assert\` is **disabled by default** (it needs \`-ea\`). Never use assertions to validate the arguments of a public method or anything security-relevant — use explicit checks that always run. Reserve \`assert\` for internal invariants you believe can never be false.
+:::`,
+  },
+  {
+    id: 'senior-thread-safety-documentation',
+    question: 'How do you design a class to be thread-safe, and how should you document that?',
+    difficulty: 'Medium',
+    category: 'Senior & Design',
+    tags: ['concurrency', 'thread-safety', 'api-design'],
+    answer: `Pick an explicit **strategy** — don't just sprinkle \`synchronized\`:
+
+- **Immutable** — no mutable state; inherently thread-safe and shareable. The best default (\`String\`, records).
+- **Thread-confined** — state never escapes one thread (locals, \`ThreadLocal\`).
+- **Guarded** — mutable state behind a consistent lock; guard *every* access and keep critical sections short. Annotate with \`@GuardedBy("lock")\`.
+- **Delegated** — hand state to thread-safe building blocks (\`ConcurrentHashMap\`, \`AtomicLong\`, \`BlockingQueue\`).
+
+Then **document the level**, because callers can't infer it: *immutable*, *thread-safe*, *conditionally thread-safe* (client must lock for compound actions, like iterating a synchronized collection), or *not thread-safe*.
+
+\`\`\`java
+// @GuardedBy("this")
+private int count;
+public synchronized void inc() { count++; }
+\`\`\`
+
+:::senior
+Undocumented thread-safety is a latent bug. \`SimpleDateFormat\` looks harmless but is **mutable and unsynchronized**, so sharing one across threads silently corrupts its output. State the contract in Javadoc; never make callers read your source to guess it.
+:::`,
+  },
+  {
+    id: 'senior-api-pagination',
+    question: 'How would you design an API that returns a large list — offset vs cursor pagination?',
+    difficulty: 'Medium',
+    category: 'Senior & Design',
+    tags: ['api-design', 'pagination', 'database'],
+    answer: `Never return an unbounded list — page it. Two designs:
+
+| | Offset / limit | Cursor / keyset |
+|---|---|---|
+| Request | \`?page=3&size=20\` → SQL \`LIMIT/OFFSET\` | \`?after=<token>\` → \`WHERE id > :k ORDER BY id LIMIT n\` |
+| Random access | jump to any page | forward (or back) only |
+| Deep pages | slow — DB scans and discards \`OFFSET n\` rows | fast — index seek, depth-independent |
+| Concurrent writes | rows shift → items skipped/duplicated across pages | stable |
+| Total count | easy | hard |
+
+**Offset** suits small, static, admin-style tables where "go to page 50" matters. **Cursor/keyset** wins for large or fast-changing datasets and infinite scroll — the client passes the last key it saw, and an index makes each page O(log n) regardless of depth.
+
+:::senior
+Make the cursor an **opaque token**, not a raw offset — that lets you change the underlying sort/filter without breaking clients. And always **cap \`size\` server-side** so one caller can't request a million rows in a single page.
+:::`,
+  },
 ];
 
 export default questions;

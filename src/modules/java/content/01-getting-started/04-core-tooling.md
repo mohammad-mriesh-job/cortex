@@ -104,6 +104,32 @@ Both download libraries automatically from repositories like **Maven Central**, 
 A build tool's most valuable job is **transitive dependency management**: pulling in your libraries' libraries and resolving version conflicts. Doing that manually with a hand-built classpath is unmaintainable past a couple of jars — which is exactly why every serious Java project uses Maven or Gradle.
 :::
 
+```quiz
+title: Check yourself
+questions:
+  - q: 'A colleague sends you `java -cp "out;libs/gson.jar" com.example.App` and it fails on your Mac with `ClassNotFoundException`. Most likely cause?'
+    options:
+      - 'The jar must be listed before the class directory'
+      - text: 'The classpath separator is Windows-style — on macOS/Linux it must be `:` not `;`'
+        correct: true
+      - '`-cp` only accepts a single entry'
+    explain: 'Classpath entries are separated by `;` on Windows and `:` on Unix-likes. With the wrong separator the whole string is treated as one bogus path, so nothing is found.'
+  - q: 'What makes `java -jar app.jar` know which class to start?'
+    options:
+      - 'The first `.class` file added to the archive'
+      - text: 'The `Main-Class` attribute in `META-INF/MANIFEST.MF`'
+        correct: true
+      - 'The JVM scans the jar for any `public static void main`'
+    explain: 'A jar is a ZIP with a manifest. `jar --main-class HelloWorld` records `Main-Class: HelloWorld` there; without it, `java -jar` fails with "no main manifest attribute". Note: with `-jar`, any `-cp` flag is ignored — the jar''s manifest `Class-Path` rules.'
+  - q: 'You want to check what `"abc".substring(1, 2)` returns without creating a file. Fastest tool?'
+    options:
+      - text: '`jshell` — type the expression, see the result'
+        correct: true
+      - '`javap -c` on a scratch class'
+      - '`java -e ''"abc".substring(1,2)''`'
+    explain: 'JShell (Java 9+) is the JDK''s REPL — no class, no `main`, no compile step. `java` has no `-e` expression flag.'
+```
+
 ## What's next
 
 You can now build, run, experiment with, and package Java code, and you know where the industrial-strength tooling takes over. From here you move into the language itself — variables, types, and the building blocks of every program.

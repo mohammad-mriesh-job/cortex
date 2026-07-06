@@ -156,6 +156,23 @@ reach for Dijkstra. And on a **DAG**, you can beat Dijkstra: relax edges in **to
 in O(V + E), negative weights allowed.
 :::
 
+## Recall
+
+```flashcards
+title: Which shortest-path algorithm?
+cards:
+  - front: 'Unweighted graph'
+    back: '**BFS** — O(V + E). Edge count = path cost, no heap needed.'
+  - front: 'Non-negative weights, single source'
+    back: '**Dijkstra** — O((V + E) log V) with a binary heap. Finalized vertices never revisited.'
+  - front: 'Negative edges possible, single source'
+    back: '**Bellman-Ford** — O(V · E). Relax all edges V − 1 times; a V-th-pass relaxation proves a negative cycle.'
+  - front: 'Weighted DAG'
+    back: '**Relax in topological order** — O(V + E), beats Dijkstra, negative weights fine (no cycles to bite you).'
+  - front: 'All-pairs shortest paths on a small dense graph'
+    back: '**Floyd-Warshall** — O(V³), a three-line triple loop; handles negative edges (not negative cycles).'
+```
+
 ## Check yourself
 
 ```quiz

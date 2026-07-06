@@ -246,6 +246,213 @@ jcmd <pid> GC.heap_dump /tmp/heap.hprof   # on demand (safer than jmap)
 \`jmap -dump\` can **pause or crash** a fragile process; prefer \`jcmd GC.heap_dump\` or continuous JFR. And measure first — many "OOMs" are just an undersized \`-Xmx\` or a container default heap of only ~25% of pod memory.
 :::`,
   },
+  {
+    id: 'jvm-stack-vs-heap',
+    question: 'What is the difference between the stack and the heap?',
+    difficulty: 'Medium',
+    category: 'JVM',
+    tags: ['stack', 'heap', 'memory'],
+    answer: `They're two runtime memory areas with different lifetimes and owners:
+
+| | Stack | Heap |
+|--|-------|------|
+| Scope | **per thread** | **shared** by all threads |
+| Holds | frames: locals, primitives, **references**, return addresses | **all objects and arrays** |
+| Lifetime | pushed on call, popped on return | until unreachable, then GC'd |
+| Management | automatic (LIFO) | garbage collector |
+| Exhaustion | \`StackOverflowError\` | \`OutOfMemoryError\` |
+
+\`\`\`java
+void m() {
+    int n = 5;                 // primitive n -> on the stack
+    Point p = new Point(1, 2); // reference p -> stack; the Point object -> heap
+}   // frame popped; the Point survives until GC finds it unreachable
+\`\`\`
+
+- A **primitive local** lives entirely on the stack; an **object** always lives on the heap, reached through a reference that may be on the stack or inside another heap object.
+- Because each thread has its own stack, locals are inherently thread-confined; heap objects are what threads can share (and race on).
+
+:::senior
+"Objects always live on the heap" is the default, but the JIT's **escape analysis** can scalar-replace a non-escaping object so it never actually allocates — an implementation detail, not something you can rely on.
+:::`,
+  },
+  {
+    id: 'jvm-reference-types',
+    question: "Strong, soft, weak, and phantom references — what's the difference?",
+    difficulty: 'Hard',
+    category: 'JVM',
+    tags: ['references', 'weakreference', 'gc', 'memory'],
+    answer: `The four reference strengths tell the GC **how eagerly** it may reclaim an object:
+
+| Type | Collected when… | Use for |
+|------|-----------------|---------|
+| **Strong** | never while reachable | ordinary references |
+| **Soft** | only when memory runs **low** | memory-sensitive caches |
+| **Weak** | at the **next GC** if only weakly reachable | canonical maps, metadata |
+| **Phantom** | after the object is collectable; \`get()\` is always \`null\` | post-mortem cleanup |
+
+\`\`\`java
+WeakHashMap<Key, Meta> cache = new WeakHashMap<>();  // entry vanishes when Key is GC'd
+SoftReference<byte[]> img = new SoftReference<>(load()); // dropped under memory pressure
+\`\`\`
+
+- **Weak** underpins \`WeakHashMap\` and \`ThreadLocal\`'s internal map — the entry disappears once the key is otherwise unreferenced.
+- **Phantom** references (with a \`ReferenceQueue\`) are the modern, safe replacement for \`finalize()\` — they power \`java.lang.ref.Cleaner\` for releasing native/off-heap resources deterministically.
+
+:::gotcha
+A \`SoftReference\` cache is **not** free memory management — it's cleared only when the heap is nearly full, often *after* a costly full GC, and can hurt latency. Prefer a bounded cache (Caffeine) with an explicit eviction policy.
+:::`,
+  },
+  {
+    id: 'jvm-memory-leaks',
+    question: 'How can you have a memory leak in a garbage-collected language like Java?',
+    difficulty: 'Medium',
+    category: 'JVM',
+    tags: ['memory-leak', 'gc', 'reachability'],
+    answer: `GC only reclaims **unreachable** objects. A Java "leak" is an object that stays **reachable but is never used again** — so the GC can't touch it. The usual culprits:
+
+1. **Unbounded \`static\` collections / caches** — a \`static Map\` you only ever add to grows forever.
+2. **Listeners / callbacks not deregistered** — the publisher keeps a strong reference to subscribers.
+3. **\`ThreadLocal\` on pooled threads** — values outlive the task because the worker thread never dies.
+4. **ClassLoader leaks** — a redeploy leaves the old loader (and all its classes/statics) reachable → \`Metaspace\` OOM.
+5. **Broken \`hashCode\`/\`equals\` keys** — entries you can no longer find but that still occupy the map.
+
+\`\`\`java
+static final List<Object> CACHE = new ArrayList<>();  // never cleared -> leak
+\`\`\`
+
+:::senior
+Diagnose with a **heap dump** in Eclipse MAT: the *dominator tree* shows what retains the most memory, and the **GC-root path** names what keeps it alive. The fix is almost always **bounded** caches, **weak** references, or explicit **removal/deregistration**.
+:::`,
+  },
+  {
+    id: 'jvm-tuning-flags',
+    question: 'What are the essential JVM flags for sizing memory and choosing a GC?',
+    difficulty: 'Medium',
+    category: 'JVM',
+    tags: ['flags', 'tuning', 'heap', 'gc'],
+    answer: `The ones you should recognize:
+
+| Flag | Controls |
+|------|----------|
+| \`-Xms\` / \`-Xmx\` | initial / **max** heap size |
+| \`-Xss\` | per-thread **stack** size |
+| \`-XX:MaxMetaspaceSize\` | cap on class metadata (native memory) |
+| \`-XX:+UseG1GC\` / \`UseZGC\` / \`UseParallelGC\` | pick the collector |
+| \`-XX:MaxGCPauseMillis\` | G1/ZGC **pause target** |
+| \`-Xlog:gc*\` | GC logging (unified logging, Java 9+) |
+| \`-XX:+HeapDumpOnOutOfMemoryError\` | dump heap on OOM |
+
+\`\`\`bash
+java -Xms2g -Xmx2g -XX:+UseG1GC -Xlog:gc* -jar app.jar
+\`\`\`
+
+- Set **\`-Xms\` = \`-Xmx\`** in servers to avoid repeated heap resizing (and to fail fast if the box can't fit it).
+- **Metaspace is native memory** — \`-Xmx\` does *not* bound it.
+
+:::gotcha
+In **containers**, don't hard-code \`-Xmx\` — use \`-XX:MaxRAMPercentage=75\` so the heap tracks the pod's memory limit. Older JVMs ignored cgroup limits and sized the heap to the whole host, causing OOM-kills.
+:::`,
+  },
+  {
+    id: 'jvm-gc-phases',
+    question: 'What are the phases of a tracing garbage collector (mark, sweep, compact)?',
+    difficulty: 'Medium',
+    category: 'JVM',
+    tags: ['gc', 'mark-sweep-compact', 'stop-the-world'],
+    answer: `A tracing collector reclaims memory in phases:
+
+1. **Mark** — starting from **GC roots**, traverse the object graph and mark everything **reachable**.
+2. **Sweep** — reclaim the space of unmarked (dead) objects.
+3. **Compact** — slide surviving objects together to remove the holes left by sweeping.
+
+**Why compact?** Without it the heap **fragments** — free space exists but not in one contiguous block, so a large allocation fails despite "free" memory. Compaction also enables fast **bump-pointer** allocation (just move a pointer).
+
+Young-gen collectors instead use **copying**: live objects are copied to a fresh space and the old one is wiped wholesale — cheap when most objects are dead (the generational hypothesis).
+
+:::senior
+The phases needing a consistent view of the heap are **stop-the-world (STW)**: all application threads pause at a **safepoint**. Modern low-latency collectors (**G1, ZGC, Shenandoah**) do marking and even compaction **concurrently** with the app, shrinking STW pauses from hundreds of ms to sub-millisecond — trading extra CPU and memory headroom for latency.
+:::`,
+  },
+  {
+    id: 'jvm-custom-classloader',
+    question: 'When and how would you write a custom ClassLoader?',
+    difficulty: 'Hard',
+    category: 'JVM',
+    tags: ['classloader', 'isolation', 'plugins'],
+    answer: `Extend \`ClassLoader\` and override **\`findClass\`** (not \`loadClass\` — keep parent delegation), obtaining bytes from your source and defining the class:
+
+\`\`\`java
+class PluginLoader extends ClassLoader {
+    protected Class<?> findClass(String name) throws ClassNotFoundException {
+        byte[] bytes = readBytesFor(name);        // network, DB, encrypted jar...
+        return defineClass(name, bytes, 0, bytes.length);
+    }
+}
+\`\`\`
+
+Real reasons to do this:
+- **Non-standard sources** — load classes from a network, database, or decrypted archive.
+- **Isolation** — give each plugin/app its own loader so their classes live in separate namespaces (two versions of a library can coexist). Drop the loader to **unload** everything it loaded.
+- **Hot reload** — a new loader per reload replaces the old class versions.
+
+:::gotcha
+A class's identity is **(name + defining ClassLoader)**. The *same* \`.class\` loaded by two loaders yields two **incompatible** types — assigning one to the other throws \`ClassCastException: Foo cannot be cast to Foo\`. This is the crux of app-server and OSGi classloading bugs.
+:::`,
+  },
+  {
+    id: 'jvm-object-header',
+    question: "How much memory does a Java object use, and what's in its header?",
+    difficulty: 'Hard',
+    category: 'JVM',
+    tags: ['object-layout', 'memory', 'compressed-oops'],
+    answer: `Every object carries a **header** before its fields:
+
+- **Mark word** (8 bytes) — identity hash code, GC age, lock state (biased/thin/fat), or a forwarding pointer during GC.
+- **Klass pointer** (4 bytes with compressed oops, else 8) — points to the class metadata.
+- **Arrays** add a 4-byte **length**.
+
+Objects are **padded to an 8-byte boundary**. So on HotSpot with compressed oops an *empty* object is **16 bytes** (12-byte header + 4 padding), and a boxed \`Integer\` is 16 bytes to hold a 4-byte \`int\` — a **4× overhead** versus a primitive.
+
+\`\`\`text
+[ mark word (8) | klass ptr (4) | fields... | padding -> 8-byte aligned ]
+\`\`\`
+
+**Compressed oops** (default when heap < 32 GB) store references and the klass pointer as 32-bit offsets, roughly halving pointer memory.
+
+:::senior
+This is why a \`List<Integer>\` of a million values costs far more than an \`int[]\` — each box is a heap object with a header, plus a reference to it. In memory-critical hot paths, prefer primitives, primitive arrays, and \`IntStream\` to avoid the per-object header tax.
+:::`,
+  },
+  {
+    id: 'jvm-diagnostic-tools',
+    question: 'What tools do you use to diagnose a running JVM?',
+    difficulty: 'Medium',
+    category: 'JVM',
+    tags: ['tooling', 'jcmd', 'jfr', 'troubleshooting'],
+    answer: `The JDK ships a full diagnostic toolkit:
+
+| Tool | Use |
+|------|-----|
+| \`jps\` | list running JVMs and their PIDs |
+| \`jstack\` / \`jcmd <pid> Thread.print\` | **thread dump** — find deadlocks, blocked/hot threads |
+| \`jmap\` / \`jcmd <pid> GC.heap_dump\` | **heap dump** — analyze leaks in Eclipse MAT |
+| \`jstat -gc\` | GC/heap stats sampled over time |
+| \`jcmd\` | Swiss-army: \`GC.run\`, \`VM.flags\`, \`VM.native_memory\` |
+| **JFR** (Java Flight Recorder) | low-overhead continuous profiling, viewed in **JMC** |
+
+\`\`\`bash
+jcmd <pid> Thread.print          # deadlock? blocked threads?
+jcmd <pid> GC.heap_dump /tmp/h.hprof
+jcmd <pid> JFR.start duration=60s filename=rec.jfr
+\`\`\`
+
+**Workflow:** high CPU → thread dump / JFR profile; rising memory → heap dump + MAT; long pauses → GC logs (\`-Xlog:gc*\`).
+
+:::senior
+Prefer **\`jcmd\`** (it subsumes \`jstack\`/\`jmap\`) and **JFR** in production — JFR runs continuously at ~1% overhead, so the recording is already there when an incident happens. \`jmap -dump\` on a struggling process can freeze or kill it.
+:::`,
+  },
 ];
 
 export default questions;

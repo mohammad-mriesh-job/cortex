@@ -22,9 +22,9 @@ CAP says: **during a network partition you can keep only two — and since parti
 
 ```mermaid
 flowchart TD
-  P{"Network partition<br/>happens (unavoidable)"} --> Choose{"Node can't reach its peers.<br/>What does it do?"}
-  Choose -->|"Refuse / block to stay correct"| CP["CP — pick Consistency<br/>(HBase, etcd, ZooKeeper)"]
-  Choose -->|"Answer with possibly-stale data"| AP["AP — pick Availability<br/>(Cassandra, DynamoDB, Riak)"]
+  P["Network partition happens (unavoidable)"] --> Choose{"Node can't reach its peers. What does it do?"}
+  Choose -->|"Refuse / block to stay correct"| CP["CP — pick Consistency (HBase, etcd, ZooKeeper)"]
+  Choose -->|"Answer with possibly-stale data"| AP["AP — pick Availability (Cassandra, DynamoDB, Riak)"]
 ```
 
 :::gotcha
@@ -40,7 +40,7 @@ CAP only describes behaviour *during* a partition. But nodes make trade-offs eve
 
 ```mermaid
 flowchart LR
-  Start["Every request"] --> Pq{"Partition<br/>right now?"}
+  Start["Every request"] --> Pq{"Partition right now?"}
   Pq -->|"P"| AC["choose A or C"]
   Pq -->|"E (normal)"| LC["choose L or C"]
 ```
@@ -100,6 +100,25 @@ tabs:
 :::senior
 There is no globally "correct" consistency level — it is **per-operation**. A bank balance display might read at quorum; a "last seen" timestamp is fine eventually consistent. Senior engineers pick the *weakest* model that still satisfies the business requirement, because every step toward strong consistency costs latency and availability. State the requirement first, then choose the model.
 :::
+
+```flashcards
+title: Consistency models — one-liners
+cards:
+  - front: 'Strong / linearizable'
+    back: 'Every read sees the **latest** write, system-wide — as if one copy. Costs coordination latency; less available under partition. (Spanner, etcd)'
+  - front: 'Read-your-writes'
+    back: 'You always see **your own** writes; others may lag. Implement by pinning post-write reads to the leader. The user-facing sweet spot.'
+  - front: 'Monotonic reads'
+    back: 'Time never goes **backwards** for one reader — once you''ve seen a value, you never see an older one. Pin a session to one replica.'
+  - front: 'Quorum (W + R > N)'
+    back: 'Read and write sets **overlap** on at least one node, so reads see the newest write. Tunable per operation. (Cassandra, DynamoDB)'
+  - front: 'Eventual consistency'
+    back: 'Replicas **converge if writes stop**. No promise when. Fastest and most available. (DNS is the canonical example)'
+  - front: 'CAP in one line'
+    back: 'During a **partition**: consistency or availability, pick one. No partition: you can have both.'
+  - front: 'PACELC in one line'
+    back: 'If **P**artition: A vs C. **E**lse: **L**atency vs **C**onsistency — strong consistency costs latency even on a healthy network.'
+```
 
 ## Check yourself
 

@@ -18,17 +18,17 @@ between requests*. Get this wrong and adding servers actively breaks users.
 flowchart TD
   subgraph SF["Stateful — state lives IN the server"]
     direction LR
-    U1[User] --> AS1["App Server<br/>session in RAM"]
-    U1 -. "next request<br/>routed elsewhere" .-> AS2["App Server<br/>no session"]
-    AS2 --> X["Logged out / error"]
+    U1[User] -->|"1. login"| AS1["App Server A — session in RAM"]
+    U1 -.->|"2. next request routed to B"| AS2["App Server B — no session"]
+    AS2 --> X["401 — logged out"]
   end
   subgraph SL["Stateless — state lives OUTSIDE"]
     direction LR
     U2[User] --> LB[Load Balancer]
-    LB --> B1[App Server]
-    LB --> B2[App Server]
-    B1 --> Store[("Shared Session Store<br/>Redis")]
-    B2 --> Store
+    LB -->|any node| B1[App Server]
+    LB -->|any node| B2[App Server]
+    B1 -->|"get session:token"| Store[("Redis session store")]
+    B2 -->|"get session:token"| Store
   end
 ```
 
@@ -84,6 +84,14 @@ or make it stateless entirely with a **signed token (JWT)** the client sends on 
   node loss and autoscaling are non-events.
 - **Cons:** a network hop per lookup (mitigated by a fast in-memory store); the session store now
   needs its own replication/HA — but that's a well-understood, contained problem.
+
+| | Sticky sessions | External store (Redis) | Signed token (JWT) |
+|--|--|--|--|
+| Extra latency | None | ~0.5–1 ms per request | None (validation is CPU-only) |
+| Node dies | Its users logged out | No impact | No impact |
+| Autoscaling / deploys | Awkward (drain, affinity) | Trivial | Trivial |
+| Revoke a session | Kill local state | Delete the key — instant | Hard — token valid until expiry (need a denylist) |
+| New dependency | LB affinity config | Redis cluster to run | Key management/rotation |
 
 :::senior
 The senior framing: **push state to the edges — the client or a dedicated data tier — and keep the

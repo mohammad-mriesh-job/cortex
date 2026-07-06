@@ -206,6 +206,325 @@ Node lca(Node n, Node p, Node q) {
 
 Runs in **O(n)** time, **O(h)** stack space. (In a *BST* you can do better: descend left/right by comparing values until the paths split.)`,
   },
+  {
+    id: 'dsa-tree-max-depth',
+    question: 'How do you compute the maximum depth (height) of a binary tree?',
+    difficulty: 'Easy',
+    category: 'Trees',
+    tags: ['recursion', 'height', 'dfs'],
+    answer: `A tree's height is **1 + the taller of its two subtrees** — a direct recursion off the tree's self-similar shape.
+
+\`\`\`java
+int maxDepth(Node n) {
+  if (n == null) return 0;               // empty subtree: height 0
+  return 1 + Math.max(maxDepth(n.left), maxDepth(n.right));
+}
+\`\`\`
+
+**O(n) time** (each node visited once), **O(h) space** for the recursion stack — O(log n) if balanced, O(n) if skewed.
+
+:::tip
+This is the simplest instance of the universal tree template: solve both children, then combine at the node. Minimum depth looks similar but must guard against a null child (a node with one child is **not** a leaf).
+:::`,
+  },
+  {
+    id: 'dsa-tree-invert',
+    question: 'How do you invert (mirror) a binary tree?',
+    difficulty: 'Easy',
+    category: 'Trees',
+    tags: ['recursion', 'mirror'],
+    answer: `Swap the left and right child of **every** node — recursively.
+
+\`\`\`java
+Node invert(Node n) {
+  if (n == null) return null;
+  Node t = n.left; n.left = n.right; n.right = t; // swap
+  invert(n.left);
+  invert(n.right);
+  return n;
+}
+\`\`\`
+
+**O(n) time, O(h) stack.** It works top-down or bottom-up — the swap and the two recursive calls commute.
+
+:::note
+Famous for the tweet mocking it as a gatekeeping interview question, it is genuinely a one-liner once you see it as "swap children everywhere." BFS or DFS both work; only the swap matters.
+:::`,
+  },
+  {
+    id: 'dsa-tree-symmetric',
+    question: 'How do you check whether a binary tree is a mirror image of itself?',
+    difficulty: 'Easy',
+    category: 'Trees',
+    tags: ['recursion', 'symmetry'],
+    answer: `Compare the two subtrees as **mirrors**: a tree is symmetric if the left subtree mirrors the right. Recurse with **two pointers moving in opposite directions**.
+
+\`\`\`java
+boolean isSymmetric(Node root) {
+  return root == null || mirror(root.left, root.right);
+}
+boolean mirror(Node a, Node b) {
+  if (a == null || b == null) return a == b;   // both null → ok
+  return a.val == b.val
+      && mirror(a.left,  b.right)              // outer pair
+      && mirror(a.right, b.left);              // inner pair
+}
+\`\`\`
+
+The key is pairing \`a.left\` with \`b.right\` and \`a.right\` with \`b.left\` — mirrored positions. **O(n) time, O(h) space.**
+
+:::gotcha
+Symmetry is about **structure and values mirrored**, not the same as "left subtree equals right subtree." A same-shape check would miss the crossed comparison.
+:::`,
+  },
+  {
+    id: 'dsa-tree-level-order',
+    question: 'How do you produce a level-by-level (BFS) traversal of a binary tree?',
+    difficulty: 'Easy',
+    category: 'Trees',
+    tags: ['bfs', 'queue', 'level-order'],
+    answer: `Use a **queue**. Process the tree one level at a time by capturing the queue's **size** at the start of each level — that many nodes belong to the current level.
+
+\`\`\`java
+Queue<Node> q = new ArrayDeque<>();
+if (root != null) q.add(root);
+while (!q.isEmpty()) {
+  int levelSize = q.size();                 // freeze this level's count
+  List<Integer> level = new ArrayList<>();
+  for (int i = 0; i < levelSize; i++) {
+    Node n = q.poll();
+    level.add(n.val);
+    if (n.left != null)  q.add(n.left);
+    if (n.right != null) q.add(n.right);
+  }
+  result.add(level);
+}
+\`\`\`
+
+**O(n) time, O(w) space** (w = max width). Snapshotting \`levelSize\` before the inner loop is what separates the levels — the same skeleton yields zigzag order, right-side view, and level averages.`,
+  },
+  {
+    id: 'dsa-tree-iterative-inorder',
+    question: 'How do you do an in-order traversal iteratively, without recursion?',
+    difficulty: 'Medium',
+    category: 'Trees',
+    tags: ['traversal', 'stack', 'inorder'],
+    answer: `Simulate the call stack with an **explicit stack**: push the entire left spine, then pop-visit-and-go-right.
+
+\`\`\`java
+Deque<Node> st = new ArrayDeque<>();
+Node cur = root;
+while (cur != null || !st.isEmpty()) {
+  while (cur != null) { st.push(cur); cur = cur.left; } // go left
+  cur = st.pop();                                        // visit
+  System.out.print(cur.val + " ");
+  cur = cur.right;                                       // then right
+}
+\`\`\`
+
+**O(n) time, O(h) space.** The explicit stack mirrors exactly what recursion does implicitly — useful when recursion depth would overflow, or when you need to **pause/resume** the traversal (e.g. a BST iterator's \`next()\`).
+
+:::senior
+For **O(1) space**, mention **Morris traversal**: it threads temporary links to the in-order predecessor instead of a stack, then restores them.
+:::`,
+  },
+  {
+    id: 'dsa-tree-validate-bst',
+    question: 'How do you validate that a binary tree is a valid BST?',
+    difficulty: 'Medium',
+    category: 'Trees',
+    tags: ['bst', 'validation', 'recursion'],
+    answer: `Each node must lie within a **(min, max) range** that tightens as you descend — not merely be greater/less than its immediate parent.
+
+\`\`\`java
+boolean valid(Node n, long lo, long hi) {
+  if (n == null) return true;
+  if (n.val <= lo || n.val >= hi) return false;
+  return valid(n.left, lo, n.val)      // left: upper bound becomes node
+      && valid(n.right, n.val, hi);    // right: lower bound becomes node
+}
+// call: valid(root, Long.MIN_VALUE, Long.MAX_VALUE)
+\`\`\`
+
+**O(n) time, O(h) space.**
+
+:::gotcha
+The #1 wrong answer only checks \`node.left.val < node.val < node.right.val\` locally — it passes invalid trees where a deep left-subtree node exceeds an ancestor. Use **inherited bounds**. And use \`long\` bounds (or the in-order-predecessor trick) so a node equal to \`Integer.MIN_VALUE\` doesn't break the comparison.
+:::`,
+  },
+  {
+    id: 'dsa-tree-diameter',
+    question: 'How do you find the diameter (longest path between any two nodes) of a binary tree?',
+    difficulty: 'Medium',
+    category: 'Trees',
+    tags: ['recursion', 'diameter', 'height'],
+    answer: `The longest path through a node is \`leftHeight + rightHeight\`. Compute **heights** in one post-order pass and track the best sum as a **side effect**.
+
+\`\`\`java
+int best = 0;
+int height(Node n) {
+  if (n == null) return 0;
+  int l = height(n.left), r = height(n.right);
+  best = Math.max(best, l + r);   // path THROUGH n (in edges)
+  return 1 + Math.max(l, r);      // height returned to parent
+}
+// diameter = best after height(root)
+\`\`\`
+
+**O(n) time, O(h) space.** The trick is that the function **returns** the height but **updates** the diameter along the way — one traversal computes both.
+
+:::senior
+This "return one quantity, side-update a global optimum" pattern also solves **max path sum**, **longest univalue path**, and **binary tree cameras** — any "best path/config anywhere in the tree" problem.
+:::`,
+  },
+  {
+    id: 'dsa-tree-kth-smallest-bst',
+    question: 'How do you find the k-th smallest element in a BST?',
+    difficulty: 'Medium',
+    category: 'Trees',
+    tags: ['bst', 'inorder', 'selection'],
+    answer: `An **in-order** traversal of a BST yields keys in ascending order — so stop at the **k-th** one. An iterative in-order lets you halt early without visiting the whole tree.
+
+\`\`\`java
+Deque<Node> st = new ArrayDeque<>();
+Node cur = root;
+while (cur != null || !st.isEmpty()) {
+  while (cur != null) { st.push(cur); cur = cur.left; }
+  cur = st.pop();
+  if (--k == 0) return cur.val;   // k-th smallest reached
+  cur = cur.right;
+}
+\`\`\`
+
+**O(h + k) time** — you descend one spine (O(h)) then pop k nodes. For the k-th **largest**, do a reverse in-order (right, node, left).
+
+:::senior
+If the tree is queried repeatedly and can be **modified**, augment each node with its **subtree size**; then k-th smallest is O(h) by comparing k against the left subtree's count at each step.
+:::`,
+  },
+  {
+    id: 'dsa-tree-balanced-check',
+    question: 'How do you check whether a binary tree is height-balanced in O(n)?',
+    difficulty: 'Medium',
+    category: 'Trees',
+    tags: ['recursion', 'balanced', 'height'],
+    answer: `The naive approach computes height at every node → O(n²). Do it **bottom-up** in one pass, returning a special **sentinel (−1)** the moment any subtree is unbalanced so the failure propagates up.
+
+\`\`\`java
+int check(Node n) {
+  if (n == null) return 0;
+  int l = check(n.left);  if (l == -1) return -1;
+  int r = check(n.right); if (r == -1) return -1;
+  if (Math.abs(l - r) > 1) return -1;      // unbalanced here
+  return 1 + Math.max(l, r);               // otherwise real height
+}
+// balanced iff check(root) != -1
+\`\`\`
+
+By returning height and detecting imbalance in the **same** post-order pass, each node is visited once → **O(n) time, O(h) space**.
+
+:::senior
+"Balanced" here means every node's subtree heights differ by ≤ 1 (AVL-style). The −1 sentinel avoids re-walking subtrees to recompute height — the core optimization over the O(n²) version.
+:::`,
+  },
+  {
+    id: 'dsa-tree-trie-implement',
+    question: 'How do you implement a trie with insert, search, and startsWith?',
+    difficulty: 'Medium',
+    category: 'Trees',
+    tags: ['trie', 'prefix-tree', 'design'],
+    answer: `Each node holds an array of child links (26 for lowercase) and an \`isWord\` flag. All three operations walk the tree character by character in **O(L)**.
+
+\`\`\`java
+class Trie {
+  Trie[] next = new Trie[26];
+  boolean isWord;
+
+  void insert(String w) {
+    Trie n = this;
+    for (char c : w.toCharArray()) {
+      int i = c - 'a';
+      if (n.next[i] == null) n.next[i] = new Trie();
+      n = n.next[i];
+    }
+    n.isWord = true;
+  }
+  boolean startsWith(String p) { return walk(p) != null; }
+  boolean search(String w) { Trie n = walk(w); return n != null && n.isWord; }
+
+  private Trie walk(String s) {
+    Trie n = this;
+    for (char c : s.toCharArray()) {
+      n = n.next[c - 'a'];
+      if (n == null) return null;
+    }
+    return n;
+  }
+}
+\`\`\`
+
+The only difference between \`search\` and \`startsWith\` is the **\`isWord\` check** at the end — a prefix need not be a complete word. **O(L) per op**, independent of the number of stored words.`,
+  },
+  {
+    id: 'dsa-tree-serialize',
+    question: 'How do you serialize and deserialize a binary tree?',
+    difficulty: 'Hard',
+    category: 'Trees',
+    tags: ['serialization', 'preorder', 'design'],
+    answer: `Use a **pre-order** traversal that writes an explicit marker (e.g. \`#\`) for **null** children — those markers encode the shape so it can be rebuilt unambiguously.
+
+\`\`\`java
+// serialize
+void write(Node n, StringBuilder sb) {
+  if (n == null) { sb.append("# "); return; }
+  sb.append(n.val).append(' ');
+  write(n.left, sb); write(n.right, sb);
+}
+// deserialize — consume tokens in the same pre-order
+Node read(Queue<String> q) {
+  String t = q.poll();
+  if (t.equals("#")) return null;
+  Node n = new Node(Integer.parseInt(t));
+  n.left  = read(q);     // build left before right (pre-order)
+  n.right = read(q);
+  return n;
+}
+\`\`\`
+
+Both directions are **O(n)**. The null markers are essential — without them the same node sequence could describe multiple trees.
+
+:::senior
+Pre-order works because the **first unread token is always the current subtree's root**. For a BST specifically, you can skip the null markers and reconstruct from bounds, saving space.
+:::`,
+  },
+  {
+    id: 'dsa-tree-build-from-traversals',
+    question: 'How do you rebuild a binary tree from its preorder and inorder traversals?',
+    difficulty: 'Hard',
+    category: 'Trees',
+    tags: ['construction', 'preorder', 'inorder'],
+    answer: `**Preorder's first element is the root.** Find it in **inorder**: everything to its left is the left subtree, everything right is the right subtree. Recurse. A hash map of value→inorder-index makes each lookup O(1).
+
+\`\`\`java
+Map<Integer,Integer> pos;     // value -> index in inorder
+int pre = 0;
+Node build(int[] preorder, int lo, int hi) {
+  if (lo > hi) return null;
+  int rootVal = preorder[pre++];
+  Node root = new Node(rootVal);
+  int mid = pos.get(rootVal);              // split point in inorder
+  root.left  = build(preorder, lo, mid - 1);
+  root.right = build(preorder, mid + 1, hi);
+  return root;
+}
+\`\`\`
+
+Consuming \`preorder\` left to right (via \`pre\`) and splitting \`inorder\` by the root index reconstructs the tree in **O(n)**.
+
+:::gotcha
+Order matters: recurse **left before right** because preorder emits the whole left subtree before the right. The map is what turns the O(n) per-level search into O(1), keeping the total at O(n) instead of O(n²).
+:::`,
+  },
 ];
 
 export default questions;

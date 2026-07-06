@@ -29,7 +29,7 @@ sequenceDiagram
   O->>I: reserve stock (blocks)
   I-->>O: ok
   O-->>U: 201 Created
-  Note over U,I: Total latency = Payment + Inventory.<br/>If Inventory is down, the whole request fails.
+  Note over U,I: Total latency = Payment + Inventory. If Inventory is down, the request fails.
 ```
 
 The user's wait is the **sum** of every downstream call, and any one failure fails the request. This is fine when the caller genuinely needs the result *now* (you can't confirm an order without knowing the card cleared).
@@ -52,7 +52,7 @@ sequenceDiagram
   Q-->>I: OrderCreated
   P->>P: charge card
   I->>I: reserve stock
-  Note over U,I: User gets an instant 202. Work happens<br/>in the background; a slow Inventory doesn't block the reply.
+  Note over U,I: User gets an instant 202. A slow Inventory no longer blocks the reply.
 ```
 
 The user gets an instant `202 Accepted`. Payment and Inventory scale and fail **independently** — if Inventory is down, its messages simply wait in the queue and are processed when it recovers. The cost: the order isn't *truly* done when the user is told "accepted," so the UI must handle **eventual consistency** (e.g. "processing…" then a push/poll for the final state).

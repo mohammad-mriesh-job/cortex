@@ -86,10 +86,15 @@ jcmd <pid> JFR.stop name=diag
 Open the recording in **JDK Mission Control (JMC)** to see allocation hot spots, the methods burning CPU, lock contention, and a GC timeline — usually pinpointing the problem without the overhead (or pauses) of older profilers.
 
 ```mermaid
-flowchart LR
-    Sym["Symptom"] --> M["High GC / slow?<br/>GC logs + JFR"]
-    Sym --> O["OutOfMemoryError?<br/>heap dump + MAT"]
-    Sym --> H["Hang / deadlock?<br/>jstack thread dumps"]
+flowchart TD
+    S["Production symptom"] --> A{"OutOfMemoryError?"}
+    A -->|yes| B["Read the message after the colon"]
+    B --> C["Heap dump via jcmd GC.heap_dump, analyse in MAT"]
+    A -->|no| D{"Hang or frozen?"}
+    D -->|yes| E["2-3 thread dumps (jstack), look for BLOCKED cycles"]
+    D -->|no| F{"Slow or long pauses?"}
+    F -->|yes| G["GC logs (-Xlog:gc*) + JFR recording in JMC"]
+    F -->|no| H["Keep a continuous JFR baseline for next time"]
 ```
 
 :::senior
@@ -99,6 +104,45 @@ Build a methodology, not a flag collection. **Reproduce, then measure with JFR b
 :::note
 `jcmd` is the modern Swiss-army knife — it subsumes much of `jmap`, `jstack`, and `jstat`. Run `jcmd <pid> help` to list every diagnostic command a JVM exposes (`VM.flags`, `GC.class_histogram`, `Thread.print`, `JFR.*`, and more).
 :::
+
+## Check yourself
+
+```quiz
+title: 'Tuning & troubleshooting'
+questions:
+  - q: 'A JVM in a 4 GB container runs with no memory flags at all. Roughly how big is its heap?'
+    options:
+      - '4 GB — the JVM takes what the container allows.'
+      - text: 'About **1 GB** — container-aware JVMs default the max heap to ~25% of the container''s memory.'
+        correct: true
+      - '512 MB, a hard-coded default.'
+      - 'It grows without bound until the cgroup kills it.'
+    explain: 'Modern JDKs respect cgroup limits but default `MaxRAMPercentage` to 25 — leaving most of the pod''s RAM unused. Set `-XX:MaxRAMPercentage=75` or an explicit `-Xmx` deliberately.'
+  - q: 'Why do experienced engineers often set `-Xms` equal to `-Xmx` in production?'
+    options:
+      - 'It enables compressed oops.'
+      - text: 'Pre-committing the heap avoids runtime resize pauses and surfaces memory-limit problems at startup instead of under load.'
+        correct: true
+      - 'It halves GC frequency.'
+      - 'It is required for G1 to work.'
+    explain: 'Growing the heap mid-flight costs pauses at the worst possible time (under load). Equal sizes trade a bit of startup footprint for predictable behaviour.'
+  - q: 'The app is hung. You take ONE `jstack` dump and see many threads in the same frame. What should you do before concluding anything?'
+    options:
+      - 'Restart the app; the evidence is complete.'
+      - text: 'Take 2-3 more dumps a few seconds apart — only threads stuck in the **same frame across dumps** indicate a real hang rather than a transient snapshot.'
+        correct: true
+      - 'Increase `-Xss` and observe.'
+      - 'Attach a debugger to each thread.'
+    explain: 'A single dump is one instant: a busy-but-healthy pool can look "stuck". Consistency across spaced dumps separates a hang or deadlock from normal work in progress.'
+  - q: 'What makes JFR the preferred production profiler?'
+    options:
+      - 'It pauses the JVM to take exact measurements.'
+      - text: 'It is built into the JVM with ~1% overhead and records allocations, locks, GC, and method samples continuously — safe to leave on in production.'
+        correct: true
+      - 'It rewrites bytecode for maximal detail.'
+      - 'It only works in development mode.'
+    explain: 'JFR''s events are captured by the JVM itself, so there is no instrumentation distortion and negligible cost. Open recordings in JMC; older `jmap`-style tools can pause or even crash a fragile process.'
+```
 
 :::key
 - Core flags: **`-Xms`/`-Xmx`** (heap, often set equal), **`-Xss`** (stack), **`-XX:MaxMetaspaceSize`**, and a **`-XX:+Use*GC`** selector; in containers set **`-XX:MaxRAMPercentage`**.

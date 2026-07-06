@@ -91,6 +91,28 @@ classDiagram
 
 Read `Order "1" --> "1..*" LineItem` as: *one order contains one or more line items*.
 
+## The two direction mistakes everyone makes
+
+1. **Inheritance arrows point UP** — from child to parent: `Animal <|-- Dog` puts the triangle
+   at `Animal`. Drawn the other way, the diagram claims the parent extends the child.
+2. **The diamond sits on the WHOLE** — `House *-- Room` puts the filled diamond on `House`, the
+   owner. A diamond on the part asserts the room owns the house.
+
+:::gotcha
+Whiteboard arrow-direction errors read as "has never used the notation outside a course". Two
+rules catch nearly every slip — **triangle at the parent, diamond at the owner** — and saying the
+sentence aloud while drawing ("Dog IS-AN Animal", "House OWNS Rooms") makes them automatic.
+:::
+
+:::senior
+In a design interview, draw **minimal UML**: class name, the two or three members that matter,
+correct arrows. Full three-compartment boxes listing every getter burn whiteboard minutes for
+zero credit. What earns credit is choosing the *right arrow* — `OrderService ..> EmailClient`
+(transient dependency, inject it) says something different from `Order *-- OrderLine` (ownership,
+with cascade-delete consequences). UML is a communication tool, not a deliverable: precision on
+relationships, brevity everywhere else.
+:::
+
 ## UML notation deck
 
 ```flashcards

@@ -47,8 +47,9 @@ The most valuable optimisation: replace a call with the callee's body, eliminati
 C2 proves whether a newly-allocated object **escapes** its creating method/thread. If it doesn't:
 
 - **Scalar replacement** — the object is never allocated on the heap at all; its fields become local values in registers/stack. **Zero allocation, zero GC pressure.**
-- **Lock elision** — synchronization on a non-escaping object is removed.
-- **Lock elision** — synchronization on a non-escaping object is dropped, since no other thread can contend for it. (HotSpot has no separate *stack-allocation* pass; scalar replacement above is how a non-escaping object avoids the heap.)
+- **Lock elision** — synchronization on a non-escaping object is dropped, since no other thread can ever contend for it.
+
+(HotSpot has no separate *stack-allocation* pass; scalar replacement is how a non-escaping object avoids the heap.)
 
 ```java
 // The Point here never escapes distance(); C2 can scalar-replace it,
@@ -71,7 +72,7 @@ A consequence of all the above: a freshly-started JVM is **slow** until counters
 
 ```mermaid
 flowchart LR
-    A["Interpreted<br/>(cold, slow)"] --> B["C1 compiled<br/>(warming)"] --> C["C2 compiled<br/>(hot, peak speed)"]
+    A["Interpreted (cold, slow)"] --> B["C1 compiled (warming)"] --> C["C2 compiled (hot, peak speed)"]
 ```
 
 :::gotcha
@@ -81,6 +82,45 @@ flowchart LR
 :::senior
 Warmup is a real cost for **short-lived and serverless** workloads that exit before reaching peak. Mitigations: **Class Data Sharing / AppCDS** to skip class loading, **`-XX:TieredStopAtLevel=1`** (C1-only) for short jobs, **GraalVM Native Image** (AOT, no JIT, millisecond startup at the cost of peak throughput), and **Project Leyden** / cached profiles to persist JIT decisions. Also watch the **code cache** (`-XX:ReservedCodeCacheSize`): if it fills, the JIT *stops compiling* and performance silently degrades — visible as the "CodeCache is full" warning.
 :::
+
+## Check yourself
+
+```quiz
+title: 'JIT compilation'
+questions:
+  - q: 'What can the JIT do that an ahead-of-time C++ compiler fundamentally cannot?'
+    options:
+      - 'Produce native machine code.'
+      - text: 'Optimise from **runtime profiles** — inline the one concrete type actually seen at a virtual call site, and later *deoptimize* if that bet breaks.'
+        correct: true
+      - 'Remove array bounds checks.'
+      - 'Use SIMD instructions.'
+    explain: 'AOT compilers see only static code. The JIT watches real behaviour: receiver types, branch frequencies, loaded classes — and can make speculative optimisations because deoptimization provides a safe undo.'
+  - q: 'Why does `new Point(x, y)` sometimes cost **zero** heap allocation in hot code?'
+    options:
+      - 'Small objects are always stack-allocated in Java.'
+      - text: '**Escape analysis**: if C2 proves the object never escapes the method, scalar replacement turns its fields into locals in registers — no allocation, no GC pressure.'
+        correct: true
+      - 'The GC recycles Point instances from a pool.'
+      - 'String deduplication also applies to small objects.'
+    explain: 'Scalar replacement only happens after C2 compiles the method with escape analysis (on by default). The same code in the interpreter still allocates — one more reason naive benchmarks mislead.'
+  - q: 'When does HotSpot **deoptimize** a compiled method?'
+    options:
+      - 'When the method has not been called for a while.'
+      - text: 'When a speculative assumption is invalidated — e.g. a new subclass loads at a devirtualized call site, or an "uncommon trap" branch is finally taken.'
+        correct: true
+      - 'When the heap is nearly full.'
+      - 'Deoptimization never happens; compiled code is permanent.'
+    explain: 'Compiled code embeds assumptions from the profile. Class loading or a rare branch can break them, so the JVM falls back to the interpreter mid-method and recompiles later with the corrected profile.'
+  - q: 'Your service is slow for the first minutes after deploy, then fast. The most likely JVM-level explanation?'
+    options:
+      - 'The GC has not run yet.'
+      - text: '**Warmup**: hot paths run interpreted until invocation/back-edge counters trigger C1 then C2 compilation.'
+        correct: true
+      - 'Metaspace is still growing.'
+      - 'The OS has not cached the JAR file.'
+    explain: 'Tier-4 (C2) code only exists after enough profiled executions. Mitigations for cold starts: CDS/AppCDS, C1-only mode for short jobs, or GraalVM Native Image for instant peak (at lower ceiling).'
+```
 
 :::key
 - HotSpot is **mixed-mode**: interpret first, then **tiered C1 → C2** compile hot methods detected via invocation/back-edge counters.

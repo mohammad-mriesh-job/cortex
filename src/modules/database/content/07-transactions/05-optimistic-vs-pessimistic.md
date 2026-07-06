@@ -13,8 +13,8 @@ overwrites the other). They differ in a single assumption:
 
 ```mermaid
 flowchart LR
-    A{Conflict likely?} -->|assume YES| P["Pessimistic<br/>lock first, then work"]
-    A -->|assume NO| O["Optimistic<br/>work, then verify at write"]
+    A{"Conflict likely?"} -->|assume YES| P["Pessimistic — lock first, then work"]
+    A -->|assume NO| O["Optimistic — work, then verify at write"]
 ```
 
 - **Pessimistic** — *"a conflict is likely, so lock the row up front."* Others **wait**.
@@ -122,6 +122,21 @@ A plain `UPDATE items SET stock = stock - 1 WHERE id = 42` is already atomic and
 lost updates** on its own — the read and write are one statement. You need optimistic/pessimistic
 control when the **decision** happens in app code *between* a separate read and a later write.
 :::
+
+```flashcards
+title: Concurrency-strategy recall
+cards:
+  - front: 'Pessimistic locking in one SQL statement?'
+    back: '`SELECT ... FOR UPDATE` — X lock now, others wait until COMMIT.'
+  - front: 'Optimistic locking''s conflict signal?'
+    back: '`UPDATE ... WHERE version = N` affects **0 rows** → someone else won; reload and retry.'
+  - front: 'Which strategy can deadlock?'
+    back: 'Only **pessimistic** — it holds locks that can form wait cycles. Optimistic holds none (its failure mode is wasted retries/livelock).'
+  - front: 'HTTP equivalent of optimistic locking?'
+    back: '**ETag + If-Match** — the server rejects the write with `412 Precondition Failed` if the resource version moved.'
+  - front: '`FOR UPDATE SKIP LOCKED` is for…'
+    back: '**Job queues** — each worker locks a different row and skips ones already claimed, so pickup never blocks.'
+```
 
 ## Check yourself
 

@@ -55,6 +55,26 @@ steps:
     line: 4
 ```
 
+## Why nothing gets missed
+
+The one question interviewers push on: *how do you know skipping pairs is safe?* Each move is a
+**proof of elimination**. When `sum < target`, the pair `(a[l], a[r])` failed with the **largest
+possible partner** for `a[l]` — so `a[l]` can never be part of a valid pair and is discarded for
+good. Symmetrically for `r--`. Every iteration permanently eliminates one element, which is why
+the loop terminates in at most n − 1 steps.
+
+```mermaid
+flowchart TD
+  S["l = 0 and r = n - 1"] --> C{"l < r ?"}
+  C -->|"no"| X["pointers met — no pair exists"]
+  C -->|"yes"| Sum{"compare a[l] + a[r] to target"}
+  Sum -->|"too small"| L["l++ — a[l] failed with the biggest partner, discard it"]
+  Sum -->|"too big"| R["r-- — a[r] failed with the smallest partner, discard it"]
+  Sum -->|"equal"| F["found the pair"]
+  L --> C
+  R --> C
+```
+
 ## Opposite ends vs fast / slow
 
 ````tabs
@@ -91,6 +111,28 @@ Many "hard" array problems are two pointers in disguise: **container with most w
 **3-sum** (fix one index, two-pointer the rest), **trapping rain water**, **merge two sorted
 arrays**. Spotting the pattern is the actual interview skill.
 :::
+
+## Classic interview variations
+
+- **3-sum** — sort, fix index `i`, run opposite-ends on the suffix. O(n²) total. The trap is
+  **duplicate triplets**: skip repeated values at `i`, and after a match advance `l`/`r` past
+  their duplicates too.
+- **Container with most water** — always move the **shorter** wall inward. Keeping it can never
+  help: width only shrinks and the height is capped by the shorter wall, so its best pairing was
+  the one you just measured.
+- **Merge two sorted arrays in place** — walk **backwards** with three pointers, filling from
+  the end of the larger buffer. Forward merging would overwrite unread elements.
+- **Valid palindrome II** (delete at most one char) — converge normally; on the first mismatch,
+  branch: check `(l+1, r)` and `(l, r-1)` — if either sub-range is a palindrome, answer is yes.
+
+## Off-by-one traps
+
+- Pair-sum uses `while (l < r)` — a pair needs **two distinct indices**; `l <= r` would let an
+  element pair with itself.
+- Palindrome check also stops at `l < r`: when they meet on the middle character there is
+  nothing left to compare.
+- In-place dedup returns `slow + 1` (a **length**), not `slow` (the last kept **index**) —
+  the classic off-by-one in the fast/slow flavor.
 
 ## Complexity
 

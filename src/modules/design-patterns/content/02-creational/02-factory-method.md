@@ -8,9 +8,12 @@ summary: Define an interface for creating an object, but let subclasses decide w
 tags: factory method, creational, design patterns, polymorphism
 ---
 
-**Factory Method** defines a method for creating an object but lets **subclasses decide which
-concrete class** to instantiate. The `Creator` calls its own `createProduct()` hook instead of
-`new`-ing a concrete type, so it stays decoupled from what it builds.
+A framework class needs to create objects whose concrete type it **cannot know**: a `Dialog` must
+make a `Button`, but only the platform-specific subclass knows whether that is a Windows button or
+an HTML button. Hard-coding `new WindowsButton()` in the base class kills reuse. **Factory Method**
+defines a method for creating an object but lets **subclasses decide which concrete class** to
+instantiate. The `Creator` calls its own `createProduct()` hook instead of `new`-ing a concrete
+type, so it stays decoupled from what it builds.
 
 ## Structure
 
@@ -95,10 +98,61 @@ tabs:
 | Polymorphism | None | Uses inheritance and dynamic dispatch |
 
 :::note
-A **static factory method** like `Integer.valueOf(int)` is a related-but-different idea — it just
-names a constructor and can cache. Factory Method (the GoF pattern) is specifically about **subclass
+A **static factory method** like `Integer.valueOf(int)` or `List.of(...)` is a related-but-different
+idea (*Effective Java* Item 1) — it names a constructor, can cache, and can return a subtype, but no
+subclassing is involved. Factory Method (the GoF pattern) is specifically about **subclass
 overriding**.
 :::
+
+## Factory Method vs Abstract Factory
+
+The most-confused creational pair. One sentence each:
+
+| | Factory Method | Abstract Factory |
+|--|--|--|
+| Creates | **One** product | A **family** of matching products |
+| Mechanism | Inheritance — subclass overrides one hook | Composition — inject a factory object with several `createX()` methods |
+| Client holds | A `Creator` subclass | A factory implementation |
+| Grow by | New `ConcreteCreator` subclass | New factory class implementing the whole interface |
+
+They compose: each `createX()` inside an Abstract Factory is itself a factory method. If the
+interviewer says "families of related objects that must match", switch to Abstract Factory.
+
+## The modern shortcut: inject a `Supplier`
+
+Since Java 8, the subclass ceremony is often unnecessary — pass the creation logic in as a
+**`Supplier<T>`** (or `Function<Args, T>`) instead of overriding a method:
+
+```java
+class Dialog {
+  private final Supplier<Button> buttonFactory;    // creation injected, not inherited
+  Dialog(Supplier<Button> buttonFactory) { this.buttonFactory = buttonFactory; }
+
+  void render() {
+    Button b = buttonFactory.get();
+    b.paint();
+  }
+}
+
+Dialog web = new Dialog(HtmlButton::new);          // constructor reference as the factory
+Dialog win = new Dialog(WindowsButton::new);
+```
+
+Same decoupling, zero subclasses. This is Factory Method collapsed to composition — and it is how
+DI frameworks think: Spring's `ObjectProvider<T>` and Guice's `Provider<T>` are exactly injected
+factories.
+
+## When NOT to use it
+
+- **Only one product exists and no second is on the roadmap** — a factory for a single concrete
+  type is indirection with no payoff; `new` is honest and greppable.
+- **The variation is data, not type** — if products differ only by field values, a parameterized
+  constructor or Builder beats a subclass per variant.
+- **You control all call sites** — a static factory method (`Item.of(...)`) gives you naming and
+  caching without any hierarchy.
+
+The over-engineering tell: a `FooFactory` interface, a `DefaultFooFactory`, and exactly one `Foo`.
+Delete the ceremony until a real second product appears.
 
 ## Real JDK examples
 

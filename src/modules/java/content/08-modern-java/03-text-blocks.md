@@ -54,6 +54,18 @@ It looks at every content line *and the closing `"""`*, finds the **least-indent
 
 So the position of the closing `"""` lets you control exactly how much indentation is removed.
 
+The compiler turns the raw block into the final `String` through a fixed pipeline:
+
+```mermaid
+flowchart TD
+    A["Text block content between triple-quotes"] --> B["Split into individual lines"]
+    B --> C["Find the least-indented line (incl. the closing delimiter)"]
+    C --> D["Strip that common indentation from every line"]
+    D --> E["Strip trailing whitespace on each line"]
+    E --> F["Apply escapes (line-continuation, backslash-s)"]
+    F --> G["Final String value"]
+```
+
 ## The `\` and `\s` escapes
 
 Two escapes are specific to text blocks:
@@ -126,6 +138,34 @@ Also, the opening line must be blank: `String s = """text""";` is a **compile er
 :::senior
 Java explored a richer **string templates** preview feature, but it was **withdrawn** for redesign — so as of the current LTS there is still no built-in interpolation. `formatted()` (or a logging framework's parameterized messages, e.g. `log.info("user {}", id)`) remains idiomatic. Don't reach for runtime formatting in a hot loop where plain concatenation is clearer and faster.
 :::
+
+## Check yourself
+
+```quiz
+title: Text blocks
+questions:
+  - q: 'Why is `String s = """text""";` a compile error?'
+    options:
+      - text: 'The opening `"""` must be followed by a line break — content cannot start on the same line'
+        correct: true
+      - 'Text blocks must be at least three lines long'
+      - '`"""` is not valid Java'
+    explain: 'A text block requires a newline immediately after the opening delimiter. Content begins on the next line; the opening line holds nothing but `"""`.'
+  - q: 'What determines how much leading indentation is stripped from a text block?'
+    options:
+      - text: 'The least-indented content line — including the position of the closing `"""`'
+        correct: true
+      - 'Exactly four spaces, always'
+      - 'Nothing is ever stripped'
+    explain: 'The compiler removes the common (incidental) indentation, measured from the least-indented line and the closing delimiter. Moving the closing `"""` shifts the margin; indentation beyond the baseline is kept as essential.'
+  - q: 'A text block contains `Hello, %s`. How do you fill in the value?'
+    options:
+      - text: 'Call `.formatted(name)` — text blocks have no built-in interpolation'
+        correct: true
+      - 'It interpolates `name` automatically from scope'
+      - 'Prefix the block with `$`'
+    explain: 'Text blocks are plain `String`s with no interpolation (string templates were withdrawn as a preview). Use `"""...""".formatted(...)` or `String.format`.'
+```
 
 :::key
 - A text block is a `"""`-delimited multi-line `String`; the opening `"""` must be followed by a newline.

@@ -21,55 +21,54 @@ buckets straight and the whole catalog becomes navigable.
 
 ```mermaid
 flowchart TD
-    G['23 GoF Patterns'] --> C['Creational — how objects are made']
-    G --> S['Structural — how objects are composed']
-    G --> B['Behavioral — how objects interact']
+    G["23 GoF Patterns"] --> C["Creational — how objects are made"]
+    G --> S["Structural — how objects are composed"]
+    G --> B["Behavioral — how objects interact"]
 
-    C --> C1['Factory Method']
-    C --> C2['Abstract Factory']
-    C --> C3['Builder']
-    C --> C4['Prototype']
-    C --> C5['Singleton']
+    C --> C1[Factory Method]
+    C --> C2[Abstract Factory]
+    C --> C3[Builder]
+    C --> C4[Prototype]
+    C --> C5[Singleton]
 
-    S --> S1['Adapter']
-    S --> S2['Bridge']
-    S --> S3['Composite']
-    S --> S4['Decorator']
-    S --> S5['Facade']
-    S --> S6['Flyweight']
-    S --> S7['Proxy']
+    S --> S1[Adapter]
+    S --> S2[Bridge]
+    S --> S3[Composite]
+    S --> S4[Decorator]
+    S --> S5[Facade]
+    S --> S6[Flyweight]
+    S --> S7[Proxy]
 
-    B --> B1['Chain of Responsibility']
-    B --> B2['Command']
-    B --> B3['Interpreter']
-    B --> B4['Iterator']
-    B --> B5['Mediator']
-    B --> B6['Memento']
-    B --> B7['Observer']
-    B --> B8['State']
-    B --> B9['Strategy']
-    B --> B10['Template Method']
-    B --> B11['Visitor']
+    B --> B1[Chain of Responsibility]
+    B --> B2[Command]
+    B --> B3[Interpreter]
+    B --> B4[Iterator]
+    B --> B5[Mediator]
+    B --> B6[Memento]
+    B --> B7[Observer]
+    B --> B8[State]
+    B --> B9[Strategy]
+    B --> B10[Template Method]
+    B --> B11[Visitor]
 ```
+
+## The second axis: class scope vs object scope
+
+The GoF book also classifies each pattern by **scope** — whether it works through **inheritance**
+(fixed at compile time) or **composition** (changeable at runtime). This axis is less famous but
+explains *why* patterns feel different:
+
+| Scope | Mechanism | Patterns |
+|--|--|--|
+| **Class** | Inheritance — relationships fixed when you compile | Factory Method, Adapter (class form), Template Method, Interpreter |
+| **Object** | Composition — relationships assembled at runtime | Everything else — 19 of 23 |
+
+The lopsided count is the GoF's own principle in action: *favor composition over inheritance*.
+Only four patterns rely on subclassing; the rest wire objects together, which is why you can
+reconfigure a Decorator stack or swap a Strategy while the program runs, but a Template Method
+subclass is chosen forever at `new` time.
 
 ## The full catalog
-
-```mermaid
-flowchart LR
-    subgraph C['Creational']
-      direction TB
-      c['5 patterns: build objects']
-    end
-    subgraph S['Structural']
-      direction TB
-      s['7 patterns: assemble objects']
-    end
-    subgraph B['Behavioral']
-      direction TB
-      b['11 patterns: assign responsibility']
-    end
-    C --> S --> B
-```
 
 | Pattern | Category | Intent (one line) |
 |--|--|--|

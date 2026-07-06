@@ -20,6 +20,21 @@ Knuth's line about premature optimization is quoted to death and still ignored. 
 
 Apply **Amdahl's Law**: optimizing code that's 5% of runtime caps your win at 5%. Find the part that's 80%.
 
+The whole discipline is a loop — profile, change *one* thing, and re-measure to confirm the win is real:
+
+```mermaid
+flowchart TD
+    A["Performance goal / SLA"] --> B["Profile a representative workload"]
+    B --> C{"Hotspot big enough to matter? (Amdahl)"}
+    C -->|no| B
+    C -->|yes| D["Change ONE thing"]
+    D --> E["Re-measure: JMH plus a full-system benchmark"]
+    E --> F{"Measurably faster?"}
+    F -->|no| G["Revert, form a new hypothesis"]
+    G --> B
+    F -->|yes| H["Keep it, then measure again"]
+```
+
 ## Microbenchmarking: use JMH, and respect its traps
 
 You cannot benchmark a JIT-compiled, adaptively-optimized runtime with a `System.nanoTime()` loop. The JIT will happily delete code whose result you ignore (**dead-code elimination**), precompute constant expressions (**constant folding**), and your loop measures a cold, interpreted VM before C2 ever kicks in.
@@ -84,6 +99,34 @@ Caching is the highest-leverage performance lever and the easiest to get wrong. 
 :::senior
 Two failure modes separate seniors from the rest. **Cache stampede / thundering herd:** when a hot key expires, thousands of requests miss simultaneously and hammer the origin — fix with request coalescing (single-flight) or jittered, probabilistic early refresh. And **invalidation** is the genuinely hard problem: prefer short TTLs or event-driven invalidation over hand-managed writes, and never cache without a clear consistency story. A subtly stale cache is worse than no cache.
 :::
+
+## Check yourself
+
+```quiz
+title: Performance
+questions:
+  - q: 'Why does `Integer.valueOf(127) == Integer.valueOf(127)` return `true` but the same expression with `128` returns `false`?'
+    options:
+      - text: '`Integer` caches −128..127, so small boxed values are shared instances; larger ones are distinct objects'
+        correct: true
+      - '`==` unboxes only for values above 127'
+      - '128 overflows a `byte`'
+    explain: 'Autoboxing calls `Integer.valueOf`, which caches −128..127. Inside that range `==` compares the *same* cached object; outside it, two distinct objects. Always compare boxed numbers with `.equals()` or unbox first.'
+  - q: 'On a modern JVM, why is hand-pooling ordinary short-lived objects usually a mistake?'
+    options:
+      - text: 'Allocation is a cheap pointer-bump and the GC reclaims young garbage fast; pools add complexity and can defeat escape analysis'
+        correct: true
+      - 'The JVM forbids object pools'
+      - 'Pooled objects are never garbage-collected'
+    explain: 'Cost is in *surviving* objects, not in allocation. Escape analysis can even keep non-escaping objects off the heap entirely. Pool only genuinely expensive resources — threads, connections, large buffers.'
+  - q: 'Why can''t you microbenchmark with a plain `System.nanoTime()` loop?'
+    options:
+      - text: 'The JIT deletes results you ignore, folds constants, and your loop measures a cold VM before C2 compiles it'
+        correct: true
+      - '`nanoTime()` has only millisecond resolution'
+      - 'Loops cannot be timed in Java'
+    explain: 'Dead-code elimination, constant folding, and warm-up all corrupt naive timing. Use JMH (it forks a JVM, warms up, and consumes results via `Blackhole`) — and still confirm against a full-system benchmark.'
+```
 
 :::key
 **Measure first** with a sampling profiler, and respect Amdahl's Law. Microbenchmark only with **JMH** — and distrust even that. Cut *surviving* allocations instead of pooling objects, avoid autoboxing (mind the `==` cache trap!), build strings with `StringBuilder`, and choose structures by locality (`ArrayList`/`ArrayDeque` over `LinkedList`). Cache with bounds, eviction, and a real plan for stampedes and invalidation.

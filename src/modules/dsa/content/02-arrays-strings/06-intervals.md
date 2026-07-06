@@ -20,7 +20,17 @@ Arrays.sort(intervals, (x, y) -> Integer.compare(x[0], y[0]));
 
 ## Merge overlapping intervals
 
-Sweep left to right; extend the current interval while the next one overlaps, otherwise close it and start fresh.
+Sweep left to right; extend the current interval while the next one overlaps, otherwise close it and start fresh. The whole loop is one repeated decision:
+
+```mermaid
+flowchart TD
+  S["Sort intervals by start"] --> N["Take the next interval cur"]
+  N --> C{"cur.start <= last.end ?"}
+  C -->|"yes — overlap"| M["Extend: last.end = max of both ends"]
+  C -->|"no — disjoint"| A["Close last, push cur as the new interval"]
+  M --> N
+  A --> N
+```
 
 ```walkthrough
 title: Merge [[1,3],[2,6],[8,10],[15,18]]
@@ -111,6 +121,10 @@ int hi = Math.min(A[i][1], B[j][1]);
 if (lo <= hi) res.add(new int[]{lo, hi});
 if (A[i][1] < B[j][1]) i++; else j++;   // drop the one that ends first
 ```
+
+:::gotcha
+Two classic slips. **Touching intervals:** does `[1,3]` overlap `[3,5]`? For merging, usually yes (`<=`); for meeting rooms, a meeting ending at 3 frees the room for one starting at 3 (`ends.peek() <= start` polls it). Flipping `<` and `<=` silently inverts both answers — state your convention out loud. **Comparator overflow:** `(a, b) -> a[0] - b[0]` overflows when coordinates span the int range; write `Integer.compare(a[0], b[0])` instead.
+:::
 
 :::senior
 The universal tells: **"sort by start"** for merge/insert problems, **"count concurrent" / sweep line** for max-overlap (rooms, CPU load, popular time), and **"two pointers on two sorted lists"** for intersections. If the question streams intervals or asks for *k* overlaps, reach for the **min-heap of end times**.

@@ -149,6 +149,28 @@ read-write lock can be *slower* than one plain mutex — the split only pays off
 frequent and non-trivial.
 :::
 
+## Drill: which lock, when
+
+"Which lock would you pick and why" is a staple senior question — drill the one-line answer for
+each tool.
+
+```flashcards
+title: 'Lock selection: one-liners'
+cards:
+  - front: '`synchronized` — when?'
+    back: 'Default choice for simple mutual exclusion. Auto-release on every exit path, JIT-optimized, one wait-set. Pick it when you need no timeout, no fairness, no multiple conditions.'
+  - front: '`ReentrantLock` — when?'
+    back: 'When you need what monitors cannot do: `tryLock` (deadlock avoidance), **timed/interruptible** acquisition, **fairness**, or **multiple `Condition` wait-sets**. Cost: `unlock()` in `finally`, always.'
+  - front: '`ReentrantReadWriteLock` — when?'
+    back: 'Reads **far outnumber** writes *and* each read holds the lock a non-trivial time. Many readers XOR one writer. Watch for **writer starvation** under constant read traffic.'
+  - front: '`StampedLock` — when?'
+    back: 'Read-mostly data with **tiny** critical sections: `tryOptimisticRead()` + `validate(stamp)` reads without locking at all. **Not reentrant, no Conditions** — never a drop-in replacement.'
+  - front: 'Fair vs unfair lock?'
+    back: 'Fair = FIFO grant order, no barging, prevents starvation — but forces a context switch per handoff and can cost 10x throughput. Default to **unfair**; go fair only when you have measured starvation.'
+  - front: 'Lock downgrading vs upgrading (RW lock)?'
+    back: 'Downgrade (write → read) is **allowed**: take read lock before releasing write. Upgrade (read → write) **self-deadlocks** — the writer waits for readers that include itself. `StampedLock` offers `tryConvertToWriteLock` instead.'
+```
+
 ## Check yourself
 
 ```quiz

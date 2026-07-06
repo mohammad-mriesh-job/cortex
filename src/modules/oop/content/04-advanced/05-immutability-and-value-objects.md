@@ -86,6 +86,37 @@ sequenceDiagram
 This is why `String`, the wrapper types, and `record`s are immutable. A **value object** models a value (money, a coordinate, a date range) rather than an entity with identity; it should be immutable and define `equals`/`hashCode` by value. Records give you all of that in one line — reach for them.
 :::
 
+## The java.time case study
+
+The JDK learned this lesson in public. `java.util.Date` and `Calendar` are mutable — a getter
+returning a stored `Date` handed every caller a lever to rewrite your object's history, and
+`SimpleDateFormat` is not even thread-safe. The replacement, `java.time` (Java 8), is immutable
+end to end: `LocalDate.plusDays(3)` returns a **new** date; originals never move; the API names
+the pattern with its `with...` copy-on-change methods. When an interviewer asks *"why did
+java.time replace Date?"*, mutability is the first word of the answer.
+
+## "Doesn't all that copying cost?"
+
+The standard objection, and the senior response: allocating short-lived objects on the JVM is
+cheap — a pointer bump in the young generation, often removed entirely by **escape analysis** —
+while immutability *deletes* costs elsewhere: no locks, no defensive copies at every trust
+boundary, no snapshot bugs. The one genuine hotspot is string concatenation in a loop, which is
+what `StringBuilder` is for. Measure before assuming; the right default for domain values is
+immutable.
+
+## Value object vs entity
+
+| | Entity | Value object |
+|--|--|--|
+| Equality | by **identity** (an id field) | by **content** |
+| Lifecycle | tracked and updated over time | replaced, never edited |
+| Example | `Customer` #42 | `Money(9.99, "EUR")` |
+| Java tool | class with id-based `equals` | `record` |
+
+Mixing them up produces the classic bug: putting a *mutable entity* in a `HashSet` keyed by
+mutable fields, or giving a `Money` amount an update method so two accounts sharing it both
+change balance.
+
 ## Check yourself
 
 ```quiz

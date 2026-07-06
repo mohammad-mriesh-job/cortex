@@ -49,6 +49,21 @@ Because the transaction lives on the **proxy**, calling one `@Transactional` met
 
 The classic use of `REQUIRES_NEW`: writing an **audit log** that must persist *even if the outer business transaction rolls back*.
 
+What actually happens on entry depends on the propagation setting **and** whether a transaction is already running:
+
+```mermaid
+flowchart TD
+    A["Call a @Transactional method"] --> B{"Transaction already active?"}
+    B -->|no| C{"Propagation setting?"}
+    B -->|yes| D{"Propagation setting?"}
+    C -->|"REQUIRED / REQUIRES_NEW"| E["Start a new transaction"]
+    C -->|MANDATORY| F["Throw: none exists"]
+    C -->|SUPPORTS| G["Run non-transactionally"]
+    D -->|"REQUIRED / SUPPORTS"| H["Join the current transaction"]
+    D -->|REQUIRES_NEW| I["Suspend current, start a new one"]
+    D -->|NESTED| J["Create a savepoint in the current"]
+```
+
 :::note
 Isolation levels (`READ_COMMITTED`, `REPEATABLE_READ`, `SERIALIZABLE`) are set via `@Transactional(isolation = ...)`. What they actually prevent — dirty/non-repeatable/phantom reads — is covered in the [Database track](/database/topic/transactions/isolation-levels).
 :::

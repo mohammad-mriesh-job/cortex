@@ -243,6 +243,360 @@ Guidance:
 Work-stealing keeps workers busy; but never block the shared commonPool, and only parallelize large, splittable, CPU-bound pipelines.
 :::`,
   },
+  {
+    id: 'mt-pools-factory-methods',
+    question: 'What do the `Executors` factory methods give you, and which are risky?',
+    difficulty: 'Easy',
+    category: 'High-Level Concurrency',
+    tags: ['executors', 'factory', 'threadpool'],
+    answer: `The \`Executors\` class has static factories that wrap common \`ThreadPoolExecutor\` (or \`ForkJoinPool\`) configurations.
+
+| Factory | What it gives you | Trap |
+| --- | --- | --- |
+| \`newFixedThreadPool(n)\` | \`n\` reused threads | **unbounded \`LinkedBlockingQueue\`** — OOM under overload |
+| \`newCachedThreadPool()\` | threads on demand, reaped after 60s | **unbounded threads** under bursts (\`SynchronousQueue\`, max = \`Integer.MAX_VALUE\`) |
+| \`newSingleThreadExecutor()\` | one thread, tasks run serially in order | unbounded queue; a stuck task blocks all others |
+| \`newScheduledThreadPool(n)\` | delayed / periodic tasks | a thrown task silently kills future runs |
+| \`newWorkStealingPool()\` | a \`ForkJoinPool\` sized to cores | not FIFO; for CPU-bound splittable work |
+| \`newVirtualThreadPerTaskExecutor()\` | one **virtual thread** per task (Java 21) | cheap blocking, but don't pool virtual threads |
+
+:::senior
+For production, construct \`ThreadPoolExecutor\` directly (bounded queue + rejection policy) or use virtual threads — the fixed/cached factories each hide an **unbounded** resource.
+:::`,
+  },
+  {
+    id: 'mt-pools-cached-pool-danger',
+    question: 'Why is `Executors.newCachedThreadPool()` dangerous under load?',
+    difficulty: 'Medium',
+    category: 'High-Level Concurrency',
+    tags: ['threadpool', 'cached', 'oom'],
+    answer: `\`newCachedThreadPool()\` backs the pool with a **\`SynchronousQueue\`** — a queue with **zero capacity** — and sets \`maximumPoolSize\` to \`Integer.MAX_VALUE\`. A \`SynchronousQueue\` can only hand off a task if a thread is *already waiting* to take it, so every submission that finds all workers busy must **spawn a brand-new thread immediately**.
+
+Under a burst that means **unbounded thread creation**: thousands of platform threads, each costing roughly **~1 MB** of stack, quickly leading to thread exhaustion or \`OutOfMemoryError: unable to create new native thread\`.
+
+\`\`\`java
+// what the factory hides
+new ThreadPoolExecutor(0, Integer.MAX_VALUE,
+    60L, TimeUnit.SECONDS, new SynchronousQueue<>());
+\`\`\`
+
+It is safe **only** for many short-lived, bursty, well-bounded tasks. For anything driven by external load, prefer a **bounded \`ThreadPoolExecutor\`** or a **virtual-thread executor**.
+
+:::gotcha
+A cached pool has no upper bound on threads. One traffic spike can create enough threads to take down the whole JVM.
+:::`,
+  },
+  {
+    id: 'mt-pools-scheduled-rate-vs-delay',
+    question: '`scheduleAtFixedRate` vs `scheduleWithFixedDelay` — how do they differ, and what is the classic gotcha?',
+    difficulty: 'Medium',
+    category: 'High-Level Concurrency',
+    tags: ['scheduledexecutorservice', 'scheduling', 'periodic'],
+    answer: `Both schedule repeating tasks on a \`ScheduledExecutorService\`; they differ in **where the clock starts**.
+
+| | \`scheduleAtFixedRate\` | \`scheduleWithFixedDelay\` |
+| --- | --- | --- |
+| Period measured from | **start** of the previous run | **end** of the previous run |
+| Goal | fixed **cadence** (e.g. every 10s) | fixed **gap** between runs |
+| If a run overruns the period | next run fires **immediately** (runs never overlap, but bunch up) | next run fires \`delay\` **after** it finally finishes |
+
+\`\`\`java
+ses.scheduleAtFixedRate(this::poll, 0, 10, TimeUnit.SECONDS);
+ses.scheduleWithFixedDelay(this::poll, 0, 10, TimeUnit.SECONDS);
+\`\`\`
+
+:::gotcha
+If a scheduled task throws an **uncaught exception**, all future executions are **silently cancelled** — the schedule just stops, with no error and no retry. Always wrap the task body in \`try/catch\`.
+:::`,
+  },
+  {
+    id: 'mt-pools-cf-creation',
+    question: 'What are the ways to create a `CompletableFuture`?',
+    difficulty: 'Medium',
+    category: 'High-Level Concurrency',
+    tags: ['completablefuture', 'supplyasync', 'creation'],
+    answer: `Four common paths, depending on whether the value is computed asynchronously or supplied by hand:
+
+- **\`supplyAsync(supplier[, executor])\`** — run a \`Supplier\` async, complete with its **return value**.
+- **\`runAsync(runnable[, executor])\`** — run a \`Runnable\` async, completes with **\`Void\`**.
+- **\`completedFuture(v)\`** — an already-complete future (handy in tests / short-circuits).
+- **\`new CompletableFuture<>()\`** then \`complete(v)\` / \`completeExceptionally(ex)\` — **manual** completion, e.g. to bridge a callback-style API.
+
+\`\`\`java
+CompletableFuture<String> a = CompletableFuture.supplyAsync(() -> load(), myPool);
+
+CompletableFuture<String> b = new CompletableFuture<>();
+api.onResult(b::complete, b::completeExceptionally);   // bridge a callback
+\`\`\`
+
+:::gotcha
+Without an explicit \`executor\`, \`supplyAsync\`/\`runAsync\` run on \`ForkJoinPool.commonPool()\`. Pass your **own** executor for blocking work so you don't starve the shared commonPool.
+:::`,
+  },
+  {
+    id: 'mt-pools-cf-combine',
+    question: 'How do you combine multiple `CompletableFuture`s (fan-out / fan-in)?',
+    difficulty: 'Medium',
+    category: 'High-Level Concurrency',
+    tags: ['completablefuture', 'allof', 'combine'],
+    answer: `Three combinators cover most cases:
+
+- **\`thenCombine(other, biFn)\`** — wait for **two** futures and merge their results.
+- **\`allOf(cf...)\`** — completes when **all** finish; returns \`CF<Void>\`, so you re-read each source future for its value.
+- **\`anyOf(cf...)\`** — completes with the result of the **first** to finish.
+
+Fan-out then fan-in:
+
+\`\`\`java
+List<CompletableFuture<Item>> futures = ids.stream()
+    .map(id -> CompletableFuture.supplyAsync(() -> fetch(id), pool))
+    .toList();
+
+CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new)).join();
+
+List<Item> items = futures.stream().map(CompletableFuture::join).toList();
+\`\`\`
+
+:::key
+\`allOf\` returns \`Void\` — it only signals completion. Collect the actual results by joining the **original** futures after it returns.
+:::`,
+  },
+  {
+    id: 'mt-pools-cf-timeout',
+    question: 'How do you bound how long a `CompletableFuture` is allowed to take?',
+    difficulty: 'Medium',
+    category: 'High-Level Concurrency',
+    tags: ['completablefuture', 'timeout', 'resilience'],
+    answer: `Two Java 9+ methods put a time bound on a stage so a hung dependency can't block the pipeline forever:
+
+- **\`orTimeout(t, unit)\`** — if not done in time, complete it **exceptionally** with \`TimeoutException\`.
+- **\`completeOnTimeout(fallback, t, unit)\`** — if not done in time, complete it with a **fallback value** instead.
+
+\`\`\`java
+fetchPrice()
+    .orTimeout(2, TimeUnit.SECONDS)
+    .exceptionally(ex -> cachedPrice());                    // degrade on timeout
+
+fetchPrice()
+    .completeOnTimeout(DEFAULT_PRICE, 2, TimeUnit.SECONDS); // fallback value
+\`\`\`
+
+Combine \`orTimeout\` with \`exceptionally\`/\`handle\` for a graceful degrade.
+
+:::gotcha
+A timeout completes the *future*, but the underlying task **keeps running** — \`orTimeout\` does not cancel or interrupt the work behind it.
+:::`,
+  },
+  {
+    id: 'mt-pools-chm-internals',
+    question: 'How does `ConcurrentHashMap` achieve high concurrency since Java 8?',
+    difficulty: 'Hard',
+    category: 'High-Level Concurrency',
+    tags: ['concurrenthashmap', 'internals', 'locking'],
+    answer: `Java 8 dropped the old **segment locks**. The map is a single \`Node[]\` table of **bins** (hash buckets), and locking is per-bin:
+
+1. **Empty bin** — insert with a lock-free **CAS** on the bin head; no lock at all in the common case.
+2. **Collision** — \`synchronized\` on the **first node of that bin only**, so writes to different bins proceed in parallel (fine-grained locking).
+3. **Treeify** — a bin exceeding **8** nodes converts from a linked list to a **red-black tree**, bounding worst-case lookups at **O(log n)**.
+4. **Resize is cooperative** — threads that find a resize in progress **help transfer** bins instead of blocking.
+5. **\`size()\`/\`mappingCount()\`** use striped counters (\`baseCount\` + \`CounterCell[]\`) — **weakly consistent**, not a lock.
+
+\`\`\`java
+map.get(k);                         // never blocks
+map.computeIfAbsent(k, this::load); // locks one bin only
+\`\`\`
+
+Iterators are **weakly consistent** (no \`ConcurrentModificationException\`), and **null keys/values are forbidden** — a null \`get\` would be ambiguous under concurrency.
+
+:::senior
+Per-bin locking plus lock-free reads is why CHM scales with cores, where \`synchronizedMap\` (one global lock) serializes every access.
+:::`,
+  },
+  {
+    id: 'mt-pools-copyonwrite',
+    question: 'When should you use `CopyOnWriteArrayList`?',
+    difficulty: 'Medium',
+    category: 'High-Level Concurrency',
+    tags: ['copyonwritearraylist', 'read-mostly', 'listeners'],
+    answer: `Every mutation (\`add\`/\`set\`/\`remove\`) **copies the entire backing array** under a lock and swaps in the new one. Reads take **no lock** — they read a stable, effectively-immutable array — and iterators walk a **snapshot**, so they never throw \`ConcurrentModificationException\` and never reflect later writes.
+
+**Use it for read-mostly, small, rarely-written collections.** The canonical case is a **listener / observer list**: read on every event, mutated only when someone subscribes.
+
+\`\`\`java
+private final List<Listener> listeners = new CopyOnWriteArrayList<>();
+void fire(Event e) { for (Listener l : listeners) l.on(e); } // no lock, safe
+\`\`\`
+
+Avoid it for **write-heavy or large** collections: each write is **O(n)** plus a full allocation, which crushes throughput and churns GC.
+
+| Need | Pick |
+| --- | --- |
+| Read-mostly listener list | \`CopyOnWriteArrayList\` |
+| General concurrent map | \`ConcurrentHashMap\` |
+| Occasional writes, simple | \`Collections.synchronizedList\` |
+
+:::key
+COW trades **O(n) writes** for lock-free reads and snapshot iteration — perfect for observer lists, wrong for write-heavy data.
+:::`,
+  },
+  {
+    id: 'mt-pools-synchronized-collections',
+    question: 'Why does `Collections.synchronizedMap` still need external synchronization, and how does it differ from `ConcurrentHashMap`?',
+    difficulty: 'Medium',
+    category: 'High-Level Concurrency',
+    tags: ['synchronizedmap', 'concurrenthashmap', 'collections'],
+    answer: `\`Collections.synchronizedMap\`/\`synchronizedList\` wrap **each method** in \`synchronized\` on a single mutex. One call is atomic, but two problems remain:
+
+1. **Compound actions aren't atomic.** \`if (!m.containsKey(k)) m.put(k, v)\` is two locked calls with a gap between them — the classic check-then-act race.
+2. **Iteration isn't safe by itself.** You must hold the lock manually across the whole loop or risk \`ConcurrentModificationException\`:
+
+\`\`\`java
+synchronized (m) {                     // required
+    for (var e : m.entrySet()) { ... }
+}
+\`\`\`
+
+It also **serializes all access** through one lock. \`ConcurrentHashMap\` instead uses **per-bin locking** (no global lock), offers **atomic combinators** (\`computeIfAbsent\`, \`merge\`) that fix check-then-act, and gives **weakly-consistent iterators** that need no external lock.
+
+:::key
+Synchronized wrappers = one lock + manual locking for compounds and iteration. Prefer the concurrent collections: they bake atomicity in and scale with cores.
+:::`,
+  },
+  {
+    id: 'mt-pools-concurrentskiplistmap',
+    question: 'What is `ConcurrentSkipListMap` for?',
+    difficulty: 'Medium',
+    category: 'High-Level Concurrency',
+    tags: ['concurrentskiplistmap', 'navigablemap', 'sorted'],
+    answer: `\`ConcurrentSkipListMap\` is a **thread-safe sorted map** (a \`NavigableMap\`), with \`ConcurrentSkipListSet\` as its \`Set\` sibling. It is implemented as a **lock-free skip list**, not a tree, giving **O(log n)** \`get\`/\`put\`/\`remove\` with **no global lock** and **weakly-consistent** iterators.
+
+Reach for it when you need concurrency **and** ordering — there is **no concurrent \`TreeMap\`**.
+
+\`\`\`java
+ConcurrentSkipListMap<Long, Event> byTime = new ConcurrentSkipListMap<>();
+byTime.put(now, e);
+byTime.ceilingEntry(cutoff);    // navigation
+byTime.headMap(cutoff).clear(); // range view
+\`\`\`
+
+It keeps keys in **sorted order** and supports the full navigable API: \`firstKey\`/\`lastKey\`, \`floor\`/\`ceiling\`/\`higher\`/\`lower\`, and range views \`headMap\`/\`tailMap\`/\`subMap\`.
+
+:::key
+Need a concurrent **sorted** or **navigable** map/set? Use \`ConcurrentSkipListMap\`/\`Set\` — \`ConcurrentHashMap\` is unordered and \`TreeMap\` isn't thread-safe.
+:::`,
+  },
+  {
+    id: 'mt-pools-managedblocker',
+    question: 'How do you block safely inside a `ForkJoinPool` or parallel stream?',
+    difficulty: 'Hard',
+    category: 'High-Level Concurrency',
+    tags: ['forkjoinpool', 'managedblocker', 'blocking'],
+    answer: `A blocking call inside the \`commonPool\` ties up one of its few workers (sized ~\`cores - 1\`); enough blocked workers **stall every parallel stream and \`...Async\` task in the JVM**. The escape hatch is **\`ForkJoinPool.ManagedBlocker\`**: when a worker is about to block through it, the pool can spin up a **compensation thread** to preserve target parallelism.
+
+\`\`\`java
+class TakeBlocker<T> implements ForkJoinPool.ManagedBlocker {
+    final BlockingQueue<T> q; T item;
+    TakeBlocker(BlockingQueue<T> q) { this.q = q; }
+    public boolean block() throws InterruptedException {
+        if (item == null) item = q.take();          // the blocking call
+        return true;
+    }
+    public boolean isReleasable() {
+        return item != null || (item = q.poll()) != null;
+    }
+}
+ForkJoinPool.managedBlock(new TakeBlocker<>(queue));
+\`\`\`
+
+- **\`block()\`** does the actual blocking and returns \`true\` when done.
+- **\`isReleasable()\`** is a cheap non-blocking check, so the pool can skip compensation if the value is already available.
+
+:::senior
+\`ManagedBlocker\` mitigates starvation, but the cleaner fix is not to block the shared pool at all — use your **own executor** or **virtual threads**.
+:::`,
+  },
+  {
+    id: 'mt-pools-completionservice',
+    question: 'What does `ExecutorCompletionService` give you over a list of `Future`s?',
+    difficulty: 'Medium',
+    category: 'High-Level Concurrency',
+    tags: ['completionservice', 'future', 'completion-order'],
+    answer: `With a plain \`List<Future>\` you consume results in **submission order** — \`futures.get(0).get()\` blocks on the first task even if the third finished first. **\`ExecutorCompletionService\`** instead hands you results in **completion order (fastest-first)**: it wraps an executor and pushes each finished task onto an internal \`BlockingQueue\`.
+
+\`\`\`java
+var ecs = new ExecutorCompletionService<Item>(pool);
+for (var id : ids) ecs.submit(() -> fetch(id));
+
+for (int i = 0; i < ids.size(); i++) {
+    Item item = ecs.take().get();   // next COMPLETED result, blocks
+    process(item);                  // handle each the moment it's ready
+}
+\`\`\`
+
+\`take()\` blocks for the next completed \`Future\`; \`poll()\` is the non-blocking variant. Ideal for **streaming results as they arrive**, or taking the **first successful** result and cancelling the rest.
+
+:::key
+List-of-Futures = submission order; \`ExecutorCompletionService\` = completion order. Use it whenever the fastest result should be processed first.
+:::`,
+  },
+  {
+    id: 'mt-pools-invokeall-invokeany',
+    question: 'What do `invokeAll` and `invokeAny` do on an ExecutorService?',
+    difficulty: 'Medium',
+    category: 'High-Level Concurrency',
+    tags: ['invokeall', 'invokeany', 'executor'],
+    answer: `Both take a **collection of \`Callable\`s** and block, but return different things:
+
+- **\`invokeAll(tasks)\`** — runs **all** tasks and **blocks until every one finishes** (or the optional timeout elapses, cancelling the unfinished ones). Returns a \`List<Future>\` in **input order**, each already done, so \`get()\` won't block.
+- **\`invokeAny(tasks)\`** — a **race**: returns the result of the **first task to complete successfully** and **cancels the rest**. It throws \`ExecutionException\` only if **every** task fails.
+
+\`\`\`java
+List<Future<Row>> all = pool.invokeAll(queries); // wait for all, ordered
+Row fastest = pool.invokeAny(replicaReads);       // first success wins
+\`\`\`
+
+| | \`invokeAll\` | \`invokeAny\` |
+| --- | --- | --- |
+| Returns | \`List<Future>\` (all) | one result |
+| Order | input order | fastest success |
+| Failure | reported per-future | throws only if **all** fail |
+
+:::key
+\`invokeAll\` = gather everything (ordered); \`invokeAny\` = first successful result, cancel the losers. Both accept a timeout.
+:::`,
+  },
+  {
+    id: 'mt-pools-graceful-shutdown',
+    question: 'What is the canonical idiom for shutting down an ExecutorService gracefully?',
+    difficulty: 'Hard',
+    category: 'High-Level Concurrency',
+    tags: ['shutdown', 'awaittermination', 'lifecycle'],
+    answer: `Because \`shutdown()\` **doesn't block** and worker threads are **non-daemon** (a live pool keeps the JVM alive), you need a three-step drain: stop accepting work, wait for in-flight tasks, then force the stragglers.
+
+\`\`\`java
+void shutdownGracefully(ExecutorService pool) {
+    pool.shutdown();                                   // 1. stop accepting new tasks
+    try {
+        if (!pool.awaitTermination(30, TimeUnit.SECONDS)) {
+            pool.shutdownNow();                        // 2. interrupt stragglers
+            if (!pool.awaitTermination(10, TimeUnit.SECONDS))
+                log.warn("pool did not terminate");    // 3. give up
+        }
+    } catch (InterruptedException e) {
+        pool.shutdownNow();
+        Thread.currentThread().interrupt();            // restore the interrupt
+    }
+}
+\`\`\`
+
+- **\`shutdown()\`** — graceful; lets queued/running tasks finish, refuses new ones.
+- **\`awaitTermination\`** — actually **blocks** until the pool drains or the timeout expires.
+- **\`shutdownNow()\`** — interrupts running tasks and drops the queue once the grace period is exceeded.
+
+:::senior
+If \`awaitTermination\` is interrupted, call \`shutdownNow()\` **and restore the interrupt** with \`Thread.currentThread().interrupt()\` — swallowing it hides the cancellation from callers up the stack.
+:::`,
+  },
 ];
 
 export default questions;

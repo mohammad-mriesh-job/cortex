@@ -166,6 +166,130 @@ load -> verify -> prepare -> resolve -> initialize
 The **bytecode verifier** runs during linking and rejects malformed or unsafe bytecode (bad stack operations, type violations) *before* it can execute — a cornerstone of the JVM's security sandbox.
 :::`,
   },
+  {
+    id: 'intro-java-features',
+    question: 'What are the main features of Java?',
+    difficulty: 'Easy',
+    category: 'Core Java',
+    tags: ['fundamentals', 'features', 'screening'],
+    answer: `The headline features an interviewer expects to hear:
+
+1. **Platform independence** — compile once to bytecode, run on any JVM ("write once, run anywhere").
+2. **Object-oriented** — code is organised into classes and objects, with encapsulation, inheritance, and polymorphism.
+3. **Automatic memory management** — the garbage collector reclaims unused objects; no manual \`free()\`, no dangling pointers.
+4. **Strong static typing** — most type errors are caught at compile time.
+5. **Rich standard library & ecosystem** — collections, concurrency, I/O, networking out of the box, plus Maven Central.
+6. **Built-in multithreading** — threads, a defined memory model, and \`java.util.concurrent\` in the core platform.
+7. **Safety** — no pointer arithmetic, bytecode verification, array bounds checks.
+8. **Backward compatibility** — 20-year-old bytecode still runs on modern JVMs, which is why enterprises trust it.
+
+:::tip
+Don't just list — be ready to go one level deeper on any item, e.g. *how* platform independence works (bytecode + per-platform JVMs) or *what* the GC trade-off is (pauses vs manual management).
+:::`,
+  },
+  {
+    id: 'intro-wora-jvm-dependent',
+    question: 'If Java is platform-independent, why is the JVM platform-dependent?',
+    difficulty: 'Easy',
+    category: 'Core Java',
+    tags: ['jvm', 'portability', 'bytecode'],
+    answer: `Because the JVM is precisely the layer that **absorbs** the platform differences. Your program compiles to **bytecode**, which is identical on every OS. Something still has to translate that bytecode into real x86/ARM instructions and real OS calls — that something is the JVM, so there is a separate JVM build *for each* OS/CPU combination.
+
+\`\`\`text
+App.java -> javac -> App.class (same bytes everywhere)
+App.class -> JVM for macOS / Linux / Windows -> native execution
+\`\`\`
+
+So the correct statement is: **Java programs are platform-independent; the JVM is not — and that's by design.** The portability of millions of apps is bought by porting one program (the JVM) per platform.
+
+:::gotcha
+Platform independence ends where your code touches the platform: JNI/native libraries, hard-coded file separators (\`C:\\\\...\`), assumptions about the default charset or line endings. "Runs anywhere" still requires writing portable code.
+:::`,
+  },
+  {
+    id: 'intro-pure-oop',
+    question: 'Is Java a pure object-oriented language?',
+    difficulty: 'Easy',
+    category: 'Core Java',
+    tags: ['oop', 'primitives', 'fundamentals'],
+    answer: `**No**, and interviewers want the two reasons:
+
+1. **Primitives** — \`int\`, \`double\`, \`boolean\`, etc. are not objects. They have no methods and don't live on the heap as objects.
+2. **Static members** — \`static\` methods and fields belong to a class, not to any object, so behaviour can exist without an instance.
+
+Java compensates with **wrapper classes** (\`Integer\`, \`Double\`, ...) and **autoboxing**, so primitives can flow into collections and generics.
+
+The pragmatic reason primitives exist is **performance**: an \`int\` is 4 bytes of raw value, while an \`Integer\` is a heap object with a header and a reference pointing at it — worse memory footprint and cache behaviour.
+
+:::senior
+Project **Valhalla** (value classes) aims to give Java "codes like a class, works like an \`int\`" — flattened, identity-free value objects — closing this historic gap between abstraction and performance.
+:::`,
+  },
+  {
+    id: 'intro-jar-file',
+    question: 'What is a JAR file, and how do you run one?',
+    difficulty: 'Easy',
+    category: 'Core Java',
+    tags: ['jar', 'packaging', 'tooling'],
+    answer: `A **JAR (Java ARchive)** is a ZIP file containing compiled \`.class\` files, resources (configs, images), and metadata under \`META-INF/MANIFEST.MF\`. It's the standard unit for packaging and distributing Java code — every Maven/Gradle dependency is a JAR.
+
+\`\`\`bash
+jar --create --file app.jar -C out .   # package compiled classes
+java -jar app.jar                      # run it
+\`\`\`
+
+\`java -jar\` works only if the manifest declares the entry point:
+
+\`\`\`text
+Main-Class: com.example.App
+\`\`\`
+
+Without that, you run it via the classpath instead: \`java -cp app.jar com.example.App\`.
+
+:::note
+A plain JAR does **not** contain its dependencies. Application servers and build plugins solve this with a **fat/uber JAR** (all dependencies repackaged inside — what \`spring-boot-maven-plugin\` builds) or a \`Class-Path\` manifest entry pointing at neighbouring JARs.
+:::`,
+  },
+  {
+    id: 'intro-java-se-ee',
+    question: 'What is the difference between Java SE and Jakarta EE?',
+    difficulty: 'Easy',
+    category: 'Core Java',
+    tags: ['java-se', 'jakarta-ee', 'ecosystem'],
+    answer: `- **Java SE (Standard Edition)** — the core platform: the language, the JVM, and the base libraries (\`java.lang\`, collections, I/O, concurrency, JDBC). What you install as "the JDK".
+- **Jakarta EE (formerly Java EE)** — a set of **specifications built on top of SE** for enterprise servers: Servlets, JPA (persistence), CDI (dependency injection), JAX-RS (REST), Bean Validation, messaging. Vendors (Payara, WildFly, Open Liberty, Tomcat for the web tier) provide the implementations.
+
+After Oracle donated Java EE to the Eclipse Foundation (2017), it was renamed **Jakarta EE**, and packages migrated \`javax.*\` → \`jakarta.*\` (EE 9+) — the import change that breaks old tutorials.
+
+:::tip
+In practice most teams consume these specs *through Spring Boot*: it runs on Java SE, embeds a servlet container, and uses Jakarta specs selectively (Servlet API, JPA via Hibernate, Bean Validation) without a full EE application server.
+:::`,
+  },
+  {
+    id: 'intro-overload-main',
+    question: 'Can you overload main()? Can you make it final or synchronized?',
+    difficulty: 'Medium',
+    category: 'Core Java',
+    tags: ['main-method', 'overloading', 'tricky'],
+    answer: `**Yes to all three** — \`main\` is an ordinary static method with one special property: the JVM launches the exact signature \`public static void main(String[])\`.
+
+\`\`\`java
+public class App {
+    public static void main(String[] args) {      // JVM entry point
+        main(42);                                 // you call overloads yourself
+    }
+    public static void main(int n) { }            // legal overload — JVM ignores it
+}
+\`\`\`
+
+- **Overloading** — fine; only the \`String[]\` version is the entry point.
+- **\`final\` / \`synchronized\` / \`strictfp\`** — all legal modifiers; the JVM doesn't care.
+- **Overriding** — impossible: \`main\` is \`static\`, and static methods are *hidden*, not overridden. A subclass \`main\` is a separate entry point.
+
+:::gotcha
+Declaring \`main(String... args)\` (varargs) **does** work as an entry point — varargs compiles to the same \`String[]\` signature. But \`main(String args)\` or \`int main(...)\` will compile and then fail at launch with "Main method not found".
+:::`,
+  },
 ];
 
 export default questions;

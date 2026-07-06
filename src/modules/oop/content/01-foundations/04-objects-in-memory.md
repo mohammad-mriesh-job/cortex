@@ -17,7 +17,7 @@ pointing to the object, which lives on the **heap**. Understanding this explains
 ```mermaid
 flowchart LR
   subgraph STACK["Stack — local variables"]
-    r["p : Point&nbsp;(a reference)"]
+    r["p : Point (a reference)"]
   end
   subgraph HEAP["Heap — the actual objects"]
     obj["Point { x = 1, y = 2 }"]
@@ -108,11 +108,47 @@ tabs:
       ```
 ````
 
+:::note
+String **literals** are interned in a shared pool, so `"hi" == "hi"` happens to be `true` — while
+`new String("hi") == "hi"` is `false`. Never compare strings with `==`: interning makes the bug
+*intermittent* rather than reliably broken, which is worse.
+:::
+
 :::senior
 Always override `hashCode()` whenever you override `equals()` — objects that are `equals` **must**
 share a `hashCode`, or they misbehave as `HashMap`/`HashSet` keys. Also note `==` on primitives
 compares *values*; the identity-vs-content distinction is only about **reference** types.
 :::
+
+## Java is pass-by-value — always
+
+When you pass an object to a method, Java copies the **reference**, not the object. The parameter
+becomes one more alias to the same heap object. Consequence: a method **can mutate the caller's
+object** through that alias, but **cannot re-point the caller's variable**:
+
+```java
+static void mutate(Point p)  { p.x = 99; }            // caller sees this — shared object
+static void replace(Point p) { p = new Point(0, 0); } // re-points only the LOCAL copy
+
+Point a = new Point(1, 2);
+mutate(a);    // a.x == 99 now
+replace(a);   // a still points at the same object — unchanged
+```
+
+:::gotcha
+"Java passes objects by reference" is the classic wrong answer. Java is **pass-by-value, always**
+— for reference types, the value being copied *is the reference*. The proof interviewers expect:
+you cannot write a `swap(a, b)` method in Java that swaps the caller's two variables.
+:::
+
+## Who cleans up the heap
+
+There is no `delete` in Java. An object lives as long as **any reference can reach it**; once the
+last alias is gone (reassigned, out of scope), it becomes unreachable and the **garbage
+collector** reclaims it eventually. Setting a variable to `null` does not destroy the object — it
+drops one alias; other aliases keep the object alive. That is exactly how memory leaks happen in a
+garbage-collected language: a forgotten reference (say, in a static `Map` used as a cache) keeps
+whole object graphs reachable forever.
 
 :::key
 A variable holds a **reference**; the object lives on the **heap**. `==` asks "same object?"

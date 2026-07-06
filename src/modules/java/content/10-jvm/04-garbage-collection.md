@@ -21,13 +21,11 @@ An object is **live** if it is reachable by following references from a set of *
 
 ```mermaid
 flowchart LR
-    R1["Thread stack (local var)"] --> A["Object A"]
-    R2["static field"] --> B["Object B"]
-    A --> C["Object C"]
-    D["Object D"] --> E["Object E"]
-    D -.unreachable.-> R1
-    style D fill:#fdd
-    style E fill:#fdd
+    R1["Root: thread stack local"] --> A["Object A - live"]
+    R2["Root: static field"] --> B["Object B - live"]
+    A --> C["Object C - live (transitively)"]
+    D["Object D - unreachable"] --> E["Object E - unreachable"]
+    E --> D
 ```
 
 Reachability is *transitive*: D and E reference each other but neither is reachable from a root, so **both are collected** — which is why Java has no classic reference-counting cycle leak. (`SoftReference`, `WeakReference`, and `PhantomReference` let the GC reclaim more aggressively.)
@@ -118,6 +116,23 @@ questions:
       - 'Serial — one thread, lowest overhead.'
       - 'It makes no difference; the collector does not affect pause time.'
     explain: 'Choose by SLO: latency-sensitive services want a low-pause concurrent collector (ZGC/Shenandoah); throughput-bound batch jobs prefer Parallel; G1 is the balanced default.'
+```
+
+```flashcards
+title: 'Collector recall'
+cards:
+  - front: '**Serial GC** — flag, pause profile, when'
+    back: '`-XX:+UseSerialGC`. Single-threaded, fully stop-the-world. Lowest footprint — tiny heaps, single-core containers.'
+  - front: '**Parallel GC** — flag, optimises for'
+    back: '`-XX:+UseParallelGC`. Multi-threaded STW, maximum **throughput**, long pauses acceptable. Default through Java 8; batch jobs.'
+  - front: '**G1** — flag, design, since when default'
+    back: '`-XX:+UseG1GC`. ~2048 heap **regions**, concurrent marking, incremental compaction toward `-XX:MaxGCPauseMillis` (default 200 ms). **Default since Java 9.**'
+  - front: '**ZGC** — flag, pause bound, key techniques'
+    back: '`-XX:+UseZGC`. Concurrent, **sub-millisecond** pauses flat from MB to multi-TB heaps — colored pointers + load barriers. **Generational since Java 21.**'
+  - front: '**Shenandoah** — flag, trait'
+    back: '`-XX:+UseShenandoahGC`. Concurrent compaction via load-reference barriers; pause time roughly constant, independent of heap size.'
+  - front: 'Minor vs major vs full GC'
+    back: '**Minor** = young gen only (cheap, frequent). **Major** = old gen. **Full** = entire heap + Metaspace — the long pause to avoid.'
 ```
 
 :::key

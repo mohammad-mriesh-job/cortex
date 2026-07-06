@@ -146,6 +146,23 @@ Two ways to fail: a closer arrives when the stack is **empty** (nothing to match
 or the string ends with the stack **non-empty** (unclosed openers, e.g. `"(("`). Check **both**.
 :::
 
+The complete decision structure — note the two distinct failure exits plus the end-of-input check:
+
+```mermaid
+flowchart TD
+  R["Read the next character"] --> O{"Opener or closer?"}
+  O -->|"opener"| PU["Push it on the stack"]
+  PU --> R
+  O -->|"closer"| E{"Stack empty?"}
+  E -->|"yes"| F1["Invalid — closer with nothing open"]
+  E -->|"no"| MT{"Pop the top — does it match?"}
+  MT -->|"no"| F2["Invalid — wrong nesting order"]
+  MT -->|"yes"| R
+  R -->|"input exhausted"| FIN{"Stack empty at the end?"}
+  FIN -->|"yes"| OK["Balanced"]
+  FIN -->|"no"| F3["Invalid — unclosed openers remain"]
+```
+
 :::senior
 When you see "matching pairs", "most recent unmatched", "nesting", or "innermost first",
 reach for a stack. It is the data structure of *deferred, reverse-order* work — the natural

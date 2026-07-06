@@ -101,6 +101,32 @@ of misses (at 20 ms) still contribute ~2 ms of the ~2.45 ms average. This is why
 over the *tail* of the hit ratio — squeezing 95% to 99% is a bigger win than it looks.
 :::
 
+## 3½. Back-of-envelope: sizing a cache in an interview
+
+This is the arithmetic that justifies the Redis box on your whiteboard — practice it until it's automatic.
+
+```walkthrough
+title: Will a cache save this database?
+code: |
+  DAU = 50M, each views ~20 profiles/day
+  reads/day = 50M x 20 = 1B
+  avg QPS   = 1B / 86,400 ~= 12,000
+  peak QPS  = ~2.5x avg  ~= 30,000
+  hot set   = 20% of 50M profiles x 1 KB = 10 GB
+  at 95% hit ratio -> DB sees 30k x 5% = 1,500 QPS
+steps:
+  - text: 'Start from users and behaviour: **50M DAU × 20 profile views/day = 1B reads/day**. Always anchor QPS in a per-user action count.'
+    line: 2
+  - text: 'Convert to QPS: divide by 86,400 seconds/day (round to 100k for mental math) → **~12k average QPS**.'
+    line: 3
+  - text: 'Traffic is not flat. Multiply by a peak factor of 2–3x → **~30k peak QPS**. A single Postgres node (~10–50k simple QPS) is already at the edge.'
+    line: 4
+  - text: 'Size the hot set: profile records ~1 KB, and the 80/20 rule says ~20% of profiles get ~80% of reads → **10 GB**. That fits comfortably in one Redis node''s RAM.'
+    line: 5
+  - text: 'Predict the effect: at a 95% hit ratio the DB sees only 5% of reads → **1,500 QPS**, well within one primary. You just justified the cache with arithmetic.'
+    line: 6
+```
+
 ## 4. When caching hurts
 
 Caching is not free. It hurts when misused:

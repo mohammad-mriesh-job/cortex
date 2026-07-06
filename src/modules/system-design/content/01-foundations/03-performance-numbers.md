@@ -66,6 +66,14 @@ cards:
     back: '~**150 ms** — dominated by the speed of light. Avoid on hot paths.'
   - front: 'Rule of thumb: RAM vs disk'
     back: 'Memory is roughly **100,000x** faster than a disk seek — the whole justification for caching.'
+  - front: 'Single Postgres/MySQL node — simple QPS'
+    back: '~**10–50k** indexed reads/sec. Beyond that: cache, replicas, or shard.'
+  - front: 'Redis — ops per second'
+    back: '~**100k ops/s** on one node. In-memory + single-threaded event loop.'
+  - front: 'Kafka partition throughput'
+    back: '~**10s of MB/s** per partition — scale by adding partitions.'
+  - front: 'Seconds per day (estimation)'
+    back: '**86,400** — round to **100k** for mental math. 1M requests/day ≈ **12 QPS**.'
 ```
 
 ## Tail latency and p99
@@ -76,19 +84,34 @@ Averages lie. If one request in a hundred takes 2 seconds, the **average** hides
 - **p99** — 99% are faster; the slowest 1% (the "tail") is worse.
 - **p999** — the truly unlucky requests.
 
+Example distribution: p50 = 20 ms, p99 = 400 ms, p999 = 2 s. The median user is happy; the tail user is staring at a spinner — and fan-out makes the tail everyone's problem:
+
 ```mermaid
-flowchart LR
-  subgraph Dist["Latency distribution"]
-    direction LR
-    A[Most requests<br/>~20 ms] --> B[p50 = 20 ms]
-    A --> C[p99 = 400 ms<br/>the tail]
-    A --> D[p999 = 2 s<br/>the fat tail]
-  end
+flowchart TD
+  PL["1 page load"] -->|"fans out to"| N["100 parallel backend calls"]
+  N --> E["each call: 99% fast, 1% slow (p99)"]
+  E --> M["P(all 100 fast) = 0.99^100 = 37%"]
+  M --> R["so 63% of page loads hit at least one slow call"]
+  R --> X["page speed = the SLOWEST of the 100"]
 ```
 
 :::gotcha
-**Fan-out amplifies the tail.** If one page makes 100 parallel backend calls and each has a 1% chance of being slow (p99), the odds that *at least one* is slow is `1 − 0.99¹⁰⁰ ≈ 63%`. So most page loads hit some server's tail. This is why big systems obsess over p99, not the average.
+**Fan-out amplifies the tail.** If one page makes 100 parallel backend calls and each has a 1% chance of being slow (p99), the odds that *at least one* is slow is `1 − 0.99¹⁰⁰ ≈ 63%`. So most page loads hit some server's tail. This is why big systems obsess over p99, not the average — and why Google calls the fixes "tail-tolerant" techniques (hedged requests: send a duplicate after a small delay, take the first answer).
 :::
+
+## Throughput rules of thumb
+
+Latency tells you the cost of one operation; these tell you when one box runs out. Quote them as orders of magnitude when sizing a design:
+
+| Component | Ballpark capacity (single node) | When you'd exceed it |
+|--|--|--|
+| Postgres / MySQL | ~10–50k simple QPS (indexed reads) | Social feed reads → add cache/replicas |
+| Redis / Memcached | ~100k ops/s | Extreme hot keys → shard or replicate the cache |
+| Kafka partition | ~10s of MB/s (add partitions to scale) | Event firehose → more partitions |
+| Single app server | ~1–10k req/s (depends on work per request) | Fan behind a load balancer |
+| One NVMe SSD | ~100k–1M IOPS, GB/s sequential | Rarely the first bottleneck |
+
+The pattern interviewers listen for: *"50k QPS of reads — one Postgres node is at its limit, so I'll put Redis in front and expect ~90% hit rate, leaving ~5k QPS on the DB."* You just justified a cache with arithmetic, not fashion.
 
 :::senior
 State SLOs in percentiles: *"feed p99 < 200 ms"*, never *"average < 200 ms"*. Interviewers listen for whether you know that the **tail** is what users actually feel — and that fan-out makes the tail the common case.

@@ -239,6 +239,222 @@ This O(n) stack space is why deep linear recursion risks \`StackOverflowError\`.
 Naive recursion can also hide exponential blow-up: two recursive calls per level (like Fibonacci) is O(2ⁿ). **Memoization** caches subresults and restores O(n).
 :::`,
   },
+  {
+    id: 'dsa-fnd-omega-theta',
+    question: 'What is the difference between Big-O, Big-Omega, and Big-Theta?',
+    difficulty: 'Medium',
+    category: 'Foundations',
+    tags: ['big-o', 'big-theta', 'big-omega', 'notation'],
+    answer: `They bound growth from different directions:
+
+- **Big-O (O)** — an **upper** bound: cost grows *no faster than* this. "At most."
+- **Big-Omega (Ω)** — a **lower** bound: cost grows *at least* this fast. "At least."
+- **Big-Theta (Θ)** — a **tight** bound: both O and Ω hold, so the function grows *exactly* this fast (up to constants).
+
+For a linear scan, the worst case is Θ(n): it is both O(n) and Ω(n). We usually *say* "O" loosely even when we mean Θ.
+
+:::gotcha
+"Big-O is the worst case" is a common conflation. O/Ω/Θ describe **growth-rate bounds**; best/average/worst describe **which input**. You can state an Ω bound on the best case or an O bound on the worst — the two axes are independent.
+:::`,
+  },
+  {
+    id: 'dsa-fnd-why-log-n',
+    question: 'Why is an algorithm that halves its input each step O(log n)?',
+    difficulty: 'Easy',
+    category: 'Foundations',
+    tags: ['big-o', 'logarithmic', 'binary-search'],
+    answer: `Because the number of times you can halve \`n\` before reaching 1 is **log₂ n**. Each step throws away half the remaining work, so the count of steps is the exponent that solves \`n / 2^k = 1\`, i.e. \`k = log₂ n\`.
+
+\`\`\`text
+n=16 → 8 → 4 → 2 → 1   (4 steps = log₂ 16)
+\`\`\`
+
+That is why **binary search**, balanced-**BST** operations, and **heap** push/pop are O(log n): they discard a constant fraction of the search space every step. Logarithmic growth is barely more than constant in practice — a billion elements need only ~30 steps.`,
+  },
+  {
+    id: 'dsa-fnd-drop-log-base',
+    question: 'Why do we write O(log n) without specifying the base of the logarithm?',
+    difficulty: 'Easy',
+    category: 'Foundations',
+    tags: ['big-o', 'logarithmic', 'notation'],
+    answer: `Because changing the base only multiplies by a **constant factor**, and Big-O ignores constants. Logarithms in different bases differ by a fixed ratio:
+
+\`\`\`text
+log₂ n = log₁₀ n / log₁₀ 2  =  (constant) · log₁₀ n
+\`\`\`
+
+So \`log₂ n\`, \`log₁₀ n\`, and \`ln n\` are all Θ of each other — writing the base would be redundant noise.
+
+:::note
+Exponents are different: \`O(n²)\` and \`O(n³)\` are *not* interchangeable, because there the difference is a factor of \`n\` (which grows), not a constant. Bases hide inside logs; exponents do not.
+:::`,
+  },
+  {
+    id: 'dsa-fnd-in-place',
+    question: 'What does it mean for an algorithm to be "in-place"?',
+    difficulty: 'Easy',
+    category: 'Foundations',
+    tags: ['space', 'in-place', 'memory'],
+    answer: `An **in-place** algorithm transforms its input using only **O(1) extra space** (a few variables) — it mutates the given array/structure rather than allocating a proportional copy.
+
+\`\`\`java
+// in-place reversal: O(1) extra space
+void reverse(int[] a) {
+  int l = 0, r = a.length - 1;
+  while (l < r) { int t = a[l]; a[l++] = a[r]; a[r--] = t; }
+}
+\`\`\`
+
+Reversing into a new array would be O(n) space and **not** in-place. In-place algorithms save memory but often **destroy the original input** — a trade-off to flag if the caller still needs it.
+
+:::note
+By convention the recursion stack is sometimes tolerated: in-place quicksort is called "in-place" despite O(log n) stack frames, because it allocates no O(n) auxiliary array.
+:::`,
+  },
+  {
+    id: 'dsa-fnd-auxiliary-space',
+    question: 'What is the difference between auxiliary space and total space complexity?',
+    difficulty: 'Medium',
+    category: 'Foundations',
+    tags: ['space', 'auxiliary-space', 'complexity'],
+    answer: `- **Total space** = the input itself **plus** everything the algorithm allocates.
+- **Auxiliary space** = only the **extra** memory beyond the input.
+
+"Space complexity" in interviews almost always means **auxiliary** space, because the input size is fixed and not the algorithm's choice.
+
+| Algorithm | Auxiliary space |
+|--|--|
+| In-place reversal | O(1) |
+| Merge sort | O(n) merge buffer |
+| Recursive DFS | O(h) call stack |
+| Iterative BFS | O(w) queue |
+
+:::senior
+Don't forget the **call stack**: a recursive function with no explicit allocation still costs O(depth) auxiliary space. Deep linear recursion is O(n) space even when it looks O(1).
+:::`,
+  },
+  {
+    id: 'dsa-fnd-string-immutability-cost',
+    question: 'Why is building a string by repeated concatenation in a loop O(n²)?',
+    difficulty: 'Easy',
+    category: 'Foundations',
+    tags: ['strings', 'immutability', 'complexity'],
+    answer: `In Java (and most managed languages) a **\`String\` is immutable**, so \`s = s + c\` cannot mutate \`s\` — it allocates a **new** string and copies all existing characters. Appending to a string of length \`k\` costs O(k), and doing that for \`n\` characters gives \`1 + 2 + … + n = O(n²)\`.
+
+\`\`\`java
+// O(n²) — each += copies the whole string so far
+String s = "";
+for (char c : chars) s += c;
+
+// O(n) — StringBuilder mutates a resizable buffer
+StringBuilder sb = new StringBuilder();
+for (char c : chars) sb.append(c);
+\`\`\`
+
+:::gotcha
+This is a classic hidden-quadratic trap. Use a **\`StringBuilder\`** (amortized O(1) append) whenever you build a string in a loop.
+:::`,
+  },
+  {
+    id: 'dsa-fnd-choose-structure',
+    question: 'How do you decide which data structure to use for a problem?',
+    difficulty: 'Easy',
+    category: 'Foundations',
+    tags: ['design', 'data-structures', 'strategy'],
+    answer: `Work from the **operations you need most** and pick the structure that makes them cheapest:
+
+| Need | Reach for |
+|--|--|
+| O(1) lookup by key | hash map / hash set |
+| O(1) lookup by index, cache-friendly scan | array |
+| ordered keys, range queries | balanced BST / \`TreeMap\` |
+| min/max on demand | heap / priority queue |
+| LIFO / FIFO / both ends | stack / queue / deque |
+| prefix queries on strings | trie |
+| dynamic connectivity | union-find |
+
+:::tip
+Name the *dominant operation* first ("I need repeated 'have I seen this?' checks → hash set"). The right structure usually falls out of one operation's required complexity.
+:::`,
+  },
+  {
+    id: 'dsa-fnd-constant-factors',
+    question: 'Is an algorithm with a lower Big-O always faster in practice?',
+    difficulty: 'Medium',
+    category: 'Foundations',
+    tags: ['big-o', 'constant-factors', 'practice'],
+    answer: `**No.** Big-O describes growth *asymptotically* — as \`n → ∞\`. For small or moderate \`n\`, **constant factors and lower-order terms** the notation hides can dominate.
+
+- Insertion sort (O(n²)) beats merge sort (O(n log n)) for \`n\` below ~16 — which is exactly why library sorts switch to it for small subarrays.
+- A cache-friendly O(n²) array pass can beat an O(n) pointer-chasing structure that thrashes the cache.
+- Hash maps are "O(1)" but have real hashing/boxing overhead a plain array index avoids.
+
+:::senior
+Big-O predicts **how cost scales**, not the wall-clock winner at a given size. For large \`n\` the lower-complexity algorithm always wins eventually; below the crossover point, measure.
+:::`,
+  },
+  {
+    id: 'dsa-fnd-loop-invariant',
+    question: 'What is a loop invariant and why is it useful?',
+    difficulty: 'Medium',
+    category: 'Foundations',
+    tags: ['correctness', 'loop-invariant', 'reasoning'],
+    answer: `A **loop invariant** is a condition that is **true before and after every iteration** of a loop. Proving one is the standard way to argue a loop is *correct* — much like induction:
+
+1. **Initialization** — it holds before the first iteration.
+2. **Maintenance** — if it holds before an iteration, it still holds after.
+3. **Termination** — when the loop ends, the invariant plus the exit condition gives the result you want.
+
+Example — Lomuto partition keeps the invariant "\`a[lo..i] ≤ pivot\`". Binary search keeps "the target, if present, lies in \`[lo, hi]\`".
+
+:::tip
+When a loop is buggy, ask "what did I *intend* to be true each iteration, and where does it break?" Stating the invariant out loud often exposes the off-by-one immediately.
+:::`,
+  },
+  {
+    id: 'dsa-fnd-analyze-recursive',
+    question: 'How do you determine the time complexity of a recursive function?',
+    difficulty: 'Hard',
+    category: 'Foundations',
+    tags: ['recursion', 'recurrence', 'analysis'],
+    answer: `Write a **recurrence** \`T(n)\` for the work, then solve it. Two reliable methods:
+
+**1. Count total calls × work per call.** Naive Fibonacci makes ~\`2ⁿ\` calls, each O(1) → **O(2ⁿ)**. A single-branch recursion of depth \`n\` doing O(1) each → O(n).
+
+**2. Recursion tree / Master Theorem** for divide-and-conquer \`T(n) = a·T(n/b) + f(n)\`:
+
+\`\`\`text
+Merge sort:  T(n) = 2T(n/2) + O(n)  → O(n log n)
+Binary search: T(n) = T(n/2) + O(1) → O(log n)
+Naive Fib:   T(n) = T(n-1)+T(n-2)+O(1) → O(2ⁿ)
+\`\`\`
+
+:::senior
+Two traps: (1) recursion also costs **O(depth) stack space**, easy to forget; (2) branching factor matters more than depth — two recursive calls per level is exponential unless **memoization** collapses the repeated subproblems back to polynomial.
+:::`,
+  },
+  {
+    id: 'dsa-fnd-tail-recursion',
+    question: 'What is tail recursion, and does the JVM optimize it?',
+    difficulty: 'Hard',
+    category: 'Foundations',
+    tags: ['recursion', 'tail-call', 'jvm'],
+    answer: `A call is **tail-recursive** when the recursive call is the **last action** in the function — its result is returned directly, with no pending work after it.
+
+\`\`\`java
+// tail form: nothing happens after the recursive call
+int sum(int n, int acc) {
+  if (n == 0) return acc;
+  return sum(n - 1, acc + n);   // tail call
+}
+\`\`\`
+
+A compiler *can* reuse the current stack frame for a tail call (**tail-call optimization**), turning the recursion into a loop and making it O(1) stack. **The JVM does not do this** — so even tail-recursive Java still grows the stack O(n) and can throw \`StackOverflowError\`.
+
+:::gotcha
+Because Java lacks TCO, deep *linear* recursion must be rewritten as an explicit loop or stack. Languages like Scala (\`@tailrec\`) or Kotlin optimize it; plain Java does not.
+:::`,
+  },
 ];
 
 export default questions;

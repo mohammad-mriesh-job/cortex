@@ -85,6 +85,34 @@ flowchart TD
 
 For producer–consumer hand-off across threads, reach into `java.util.concurrent` for a `BlockingQueue` (e.g. `ArrayBlockingQueue`, `LinkedBlockingQueue`) rather than synchronizing an `ArrayDeque` by hand.
 
+## Check yourself
+
+```quiz
+title: Queues & deques
+questions:
+  - q: 'You iterate a `PriorityQueue` with a for-each loop. In what order do elements come out?'
+    options:
+      - text: 'Heap-array order — **not** sorted; only the head is guaranteed to be the minimum'
+        correct: true
+      - 'Fully sorted ascending'
+      - 'Insertion order (FIFO)'
+    explain: 'A PriorityQueue only keeps its head ordered. Iteration exposes the raw binary-heap array, which is not sorted. To drain in sorted order you must repeatedly `poll()`.'
+  - q: 'Why prefer `offer`/`poll`/`peek` over `add`/`remove`/`element`?'
+    options:
+      - text: 'They signal failure by returning a special value (`false`/`null`) instead of throwing'
+        correct: true
+      - 'They are O(1) while the others are O(n)'
+      - 'They are thread-safe'
+    explain: 'The two families differ only in failure behaviour: `add`/`remove`/`element` throw on a full/empty queue, while `offer`/`poll`/`peek` return `false`/`null`, so ordinary empty/full conditions do not become exceptions.'
+  - q: 'On an `ArrayDeque` used as a stack, which end do `push` and `pop` operate on?'
+    options:
+      - text: 'The **head** — `push` adds first, `pop` removes first, giving LIFO'
+        correct: true
+      - 'The tail, like enqueue/dequeue'
+      - 'A random end depending on capacity'
+    explain: '`push`/`pop`/`peek` all work on the head (last-in-first-out). Used as a queue you instead add at the tail and remove from the head. All are amortized O(1).'
+```
+
 :::key
 Use `offer`/`poll`/`peek` (they return rather than throw). **`ArrayDeque`** is the go-to for both queues (FIFO) and stacks (LIFO) — never `Stack` or `LinkedList`. **`PriorityQueue`** is a binary heap: O(log n) insert/remove, O(1) peek of the min, and *not* sorted on iteration.
 :::

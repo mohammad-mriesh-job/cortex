@@ -56,6 +56,36 @@ static <T extends Comparable<T>> T max(T a, T b) {
 - **Wildcard** `List<? extends Number>` — a list of some unknown Number subtype (producer, read-only).
 - **Lower bound** `List<? super Integer>` — accepts Integer and its supertypes (consumer). *PECS: Producer `extends`, Consumer `super`.*
 
+## Invariance — the question everyone gets wrong
+
+Is `List<Dog>` a subtype of `List<Animal>`? **No.** Generics are **invariant**, and the compiler
+is protecting you:
+
+```java
+List<Dog> dogs = new ArrayList<>();
+List<Animal> animals = dogs;   // does NOT compile — and here is why:
+animals.add(new Cat());        // a Cat would enter the dog list...
+Dog d = dogs.get(0);           // ...and explode here with a ClassCastException
+```
+
+Arrays made the opposite choice — they **are** covariant — and pay for it at runtime:
+
+```java
+Object[] objs = new String[1]; // legal: arrays are covariant
+objs[0] = 42;                  // compiles fine; throws ArrayStoreException at RUNTIME
+```
+
+Generics moved that failure to compile time. Wildcards then restore flexibility *safely*:
+`List<? extends Animal>` accepts a `List<Dog>` but forbids `add` (producer, read-only), while
+`List<? super Dog>` accepts `Dog` writes (consumer). That is PECS in action — and exactly how
+the JDK types `Collections.copy(List<? super T> dest, List<? extends T> src)`.
+
+:::gotcha
+`List<Object>` and `List<?>` are not the same: you can add anything to a `List<Object>`, but
+nothing except `null` to a `List<?>`. And a **raw** `List` (no type argument) opts out of generic
+checking entirely — it exists for pre-Java-5 compatibility and should never appear in new code.
+:::
+
 ## The three kinds of polymorphism
 
 | Kind | A.k.a. | Mechanism | Example |

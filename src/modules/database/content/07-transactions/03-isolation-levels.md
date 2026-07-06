@@ -88,9 +88,9 @@ lower concurrency.
 
 ```mermaid
 flowchart LR
-    A["READ UNCOMMITTED<br/>allows all 3"] --> B["READ COMMITTED<br/>no dirty reads"]
-    B --> C["REPEATABLE READ<br/>+ no non-repeatable"]
-    C --> D["SERIALIZABLE<br/>+ no phantoms"]
+    A["READ UNCOMMITTED — allows all 3"] -->|"blocks dirty reads"| B["READ COMMITTED"]
+    B -->|"blocks non-repeatable reads"| C["REPEATABLE READ"]
+    C -->|"blocks phantoms and write skew"| D["SERIALIZABLE"]
 ```
 
 ## What each level actually does

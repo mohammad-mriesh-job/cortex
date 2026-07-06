@@ -52,6 +52,24 @@ enum Operation {
 int result = Operation.TIMES.apply(6, 7); // 42
 ```
 
+Under the hood, each constant with a body compiles to its own **anonymous subclass** of the enum — `Operation` is effectively a tiny sealed hierarchy:
+
+```mermaid
+classDiagram
+    class Operation {
+        <<enum>>
+        +apply(int a, int b)* int
+    }
+    Operation <|-- PLUS
+    Operation <|-- TIMES
+    class PLUS {
+        +apply(int a, int b) int
+    }
+    class TIMES {
+        +apply(int a, int b) int
+    }
+```
+
 :::senior
 Constant-specific methods keep behaviour *next to* the constant it belongs to, so adding a new constant forces you to supply its behaviour (the compiler complains otherwise). Compare that to a `switch` scattered across the codebase that silently falls through to a default when you add a value. This "make illegal states unrepresentable" pattern is a hallmark of good enum design.
 :::
@@ -109,6 +127,39 @@ Registry.INSTANCE.put("key", 123);
 :::tip
 *Effective Java* calls a single-element enum "the best way to implement a singleton." It sidesteps the subtle bugs (double-checked locking, reflection attacks, broken `readResolve`) that plague the classic private-constructor approach.
 :::
+
+```quiz
+title: Check yourself
+questions:
+  - q: 'A database stores `status.ordinal()`. Six months later someone inserts a new constant in the middle of the enum. Result?'
+    options:
+      - 'Nothing — ordinals are assigned once and never change'
+      - text: 'Every stored value after the insertion point now maps to the wrong constant'
+        correct: true
+      - 'A runtime exception the first time `values()` is called'
+    explain: '`ordinal()` is just declaration position. Reordering or inserting constants shifts it silently — existing rows keep their old numbers but those numbers now name different constants. Persist an explicit code field or `name()` instead.'
+  - q: 'What does `Day.valueOf("monday")` do (constant is declared `MONDAY`)?'
+    options:
+      - 'Returns `Day.MONDAY` — lookup is case-insensitive'
+      - text: 'Throws `IllegalArgumentException` — the name must match exactly'
+        correct: true
+      - 'Returns `null`'
+    explain: '`valueOf` requires the exact identifier. For lenient parsing, write your own lookup (e.g. uppercase the input first, or keep a `Map<String, Day>`).'
+  - q: 'Why is comparing enums with `==` safe, when it is a bug for `String` or `Integer`?'
+    options:
+      - 'The compiler rewrites `==` to `.equals()` for enum operands'
+      - text: 'Each constant is a JVM-guaranteed singleton, so reference equality *is* value equality'
+        correct: true
+      - 'It is not safe — always use `.equals()` on enums too'
+    explain: 'The JVM creates exactly one instance per constant per class loader, so two references to `Day.FRIDAY` are always the same object. `==` is even preferable: it''s null-safe (no NPE) and compile-time type-checked against comparing different enum types.'
+  - q: 'Why is `EnumSet` dramatically faster and smaller than `HashSet` for enum elements?'
+    options:
+      - 'It caches hash codes of the constants'
+      - text: 'It stores membership as a bit vector — one bit per constant, a single `long` for up to 64 constants'
+        correct: true
+      - 'It keeps elements sorted in a balanced tree'
+    explain: 'Membership tests, unions, and intersections become single bitwise operations. `EnumMap` plays the same trick with an array indexed by `ordinal()`. Prefer them whenever keys/elements are enums.'
+```
 
 :::key
 Enums are type-safe constant *classes*: give them `private` constructors, fields, and methods, including constant-specific overrides of `abstract` methods. Use `values()`/`valueOf()`/`name()` freely but avoid persisting `ordinal()`. Reach for `EnumSet`/`EnumMap` for fast enum-keyed collections, and use a single-constant enum for a bullet-proof singleton.

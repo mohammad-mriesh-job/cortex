@@ -119,6 +119,28 @@ And `CompletableFuture` does **not** cancel the underlying work — `cancel(true
 future exceptionally; the running task keeps going unless it checks for interruption.
 :::
 
+## Drill: the method zoo
+
+CompletableFuture questions are mostly vocabulary — map the verb to the situation and you have the
+answer.
+
+```flashcards
+title: CompletableFuture methods
+cards:
+  - front: '`supplyAsync` vs `runAsync`'
+    back: 'Both start a stage on a pool: `supplyAsync(Supplier<T>)` produces a **value**; `runAsync(Runnable)` produces **Void**. Default pool is `commonPool()` — pass your own executor for IO.'
+  - front: '`thenApply` vs `thenCompose`'
+    back: '`thenApply` = **map**: transform with `T -> U`. `thenCompose` = **flat-map**: chain a function returning another `CompletableFuture`, flattening `CF<CF<U>>` to `CF<U>`.'
+  - front: '`thenCombine`'
+    back: 'Join **two independent** futures: both run concurrently; the `(a, b) -> r` combiner fires when both complete. For dependent calls use `thenCompose` instead.'
+  - front: '`allOf` / `anyOf`'
+    back: '`allOf(...)` completes when **all** do — returns `CF<Void>`, so re-read each input with `join()`. `anyOf(...)` completes with the **first** result (including a first *failure*).'
+  - front: '`exceptionally` vs `handle` vs `whenComplete`'
+    back: '`exceptionally`: runs **only on failure**, supplies a fallback. `handle((v, ex))`: **always** runs, can transform either path. `whenComplete`: always runs but is a **peek** — cannot change the result.'
+  - front: '`thenApply` vs `thenApplyAsync` — which thread?'
+    back: 'Plain `thenApply` may run on **whichever thread completed the previous stage** (even the caller, if already complete). `thenApplyAsync` always dispatches to a pool — use it with an explicit executor when the thread matters.'
+```
+
 ## Check yourself
 
 ```quiz

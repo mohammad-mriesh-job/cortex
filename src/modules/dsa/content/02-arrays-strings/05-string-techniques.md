@@ -12,6 +12,17 @@ Strings are just **arrays of characters**, so every array technique applies — 
 patterns that come up so often they are worth memorizing: **frequency maps**, **two-pointer
 scans**, and **in-place reversal**. Master these three and most string questions fall quickly.
 
+The phrasing of the problem points straight at the tool:
+
+```mermaid
+flowchart TD
+  Q["String problem"] --> T{"What is it really asking?"}
+  T -->|"same letters, any order"| A["Frequency map int array of 26 — anagram family"]
+  T -->|"reads the same both ways"| P["Two pointers converging — palindrome"]
+  T -->|"reverse or edit in place"| R["Copy to char array, two-pointer swap"]
+  T -->|"substring containing or avoiding X"| W["Sliding window with live counts"]
+```
+
 ## Frequency maps: the anagram workhorse
 
 A **frequency map** counts how many times each character appears. Two strings are **anagrams**

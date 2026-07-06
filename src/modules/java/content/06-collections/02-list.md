@@ -71,6 +71,18 @@ for (int i = 0; i < linked.size(); i++) sum += linked.get(i);  // O(n²)!
 Use an enhanced `for` / iterator instead, which advances node-by-node in O(n) total.
 :::
 
+## The `remove` overload trap
+
+`List` declares **two** removes: `remove(int index)` and `remove(Object o)`. With a `List<Integer>` both are applicable — and Java picks the **more specific** primitive overload, which is almost never what you meant:
+
+```java
+List<Integer> nums = new ArrayList<>(List.of(10, 20, 30));
+nums.remove(1);              // removes INDEX 1 → [10, 30]  (the value 20 is gone!)
+nums.remove(Integer.valueOf(30)); // removes the VALUE 30 → [10]
+```
+
+The same overload pair also explains why `remove(Object)` returns `boolean` (was it present?) while `remove(int)` returns the **removed element**.
+
 ## When to use which
 
 - **`ArrayList`** — your default for almost everything: indexed access, iteration, and appends.
@@ -79,6 +91,34 @@ Use an enhanced `for` / iterator instead, which advances node-by-node in O(n) to
 :::senior
 In practice `ArrayList` wins even where `LinkedList` looks better on paper. Arrays are **cache-friendly** (contiguous memory), while each `LinkedList` node is a separate heap object causing cache misses and ~3× the memory overhead. If you need a queue or stack, prefer **`ArrayDeque`** over `LinkedList` — it's faster and leaner. `LinkedList` is rarely the right answer in modern Java.
 :::
+
+## Check yourself
+
+```quiz
+title: List internals
+questions:
+  - q: 'For a `List<Integer> nums`, what does `nums.remove(1)` do?'
+    options:
+      - text: 'Removes the element at **index 1**'
+        correct: true
+      - 'Removes the value `1`'
+      - 'Throws because the call is ambiguous'
+    explain: 'With a primitive `int` literal the compiler binds to the more specific `remove(int index)` overload, so it removes *by index*. To delete the value, call `nums.remove(Integer.valueOf(1))`.'
+  - q: 'Why is `for (int i = 0; i < list.size(); i++) sum += list.get(i);` a trap on a `LinkedList`?'
+    options:
+      - text: 'Each `get(i)` walks the chain from an end, making the loop O(n²)'
+        correct: true
+      - '`size()` is O(n) on a LinkedList'
+      - 'It throws `ConcurrentModificationException`'
+    explain: 'A LinkedList has no index arithmetic, so every `get(i)` is O(n) and the loop is O(n²). Use an enhanced-for / iterator, which advances node-by-node in O(n) total.'
+  - q: 'You need a stack or queue. What is the modern default implementation?'
+    options:
+      - text: '`ArrayDeque` — a contiguous circular array, faster and leaner than `LinkedList`'
+        correct: true
+      - '`LinkedList`, because O(1) at the ends beats an array'
+      - '`java.util.Stack`, the purpose-built class'
+    explain: 'ArrayDeque gives O(1) amortized ends with excellent cache locality. LinkedList allocates a node per element (~3× memory, cache misses); `Stack` extends `Vector` and is needlessly synchronized.'
+```
 
 :::key
 `ArrayList` = fast random access (O(1) `get`), O(1) amortized append, O(n) middle inserts. `LinkedList` = O(1) at the ends, O(n) indexing. Default to `ArrayList`; reach for `ArrayDeque` (not `LinkedList`) when you need end-operations.

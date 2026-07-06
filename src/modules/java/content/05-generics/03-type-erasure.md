@@ -118,6 +118,39 @@ Erasure is the price of Java 5's backward compatibility: generic code links agai
 You can still recover *some* generic information through reflection: `Method.getGenericReturnType()` and `getGenericParameterTypes()` expose the signatures stored in class metadata, even though individual instances carry none.
 :::
 
+```quiz
+title: Check yourself
+questions:
+  - q: 'What does `new ArrayList<String>().getClass() == new ArrayList<Integer>().getClass()` evaluate to?'
+    options:
+      - '`false` — they are different parameterized types'
+      - text: '`true` — erasure leaves a single runtime class, `ArrayList`'
+        correct: true
+      - 'Compile error — you cannot compare Class objects with `==`'
+    explain: 'Type arguments exist only at compile time. Both expressions yield the same `Class<ArrayList>` object, so `==` is `true` (and comparing Class references with `==` is idiomatic — they are singletons per loader).'
+  - q: 'Why is `if (x instanceof List<String>)` rejected by the compiler?'
+    options:
+      - '`instanceof` never works on interfaces'
+      - text: 'At runtime the `<String>` no longer exists, so the check is unanswerable — only reifiable types can be tested'
+        correct: true
+      - 'It compiles but always returns false'
+    explain: 'Erasure removes the type argument, so the JVM could never distinguish a `List<String>` from a `List<Integer>`. Test `x instanceof List<?>` instead, and design APIs with `Class<T>` tokens when you need the runtime type.'
+  - q: 'What does the `@SafeVarargs` annotation actually do?'
+    options:
+      - 'Makes the compiler verify the varargs array is never misused'
+      - text: 'Suppresses the heap-pollution warning based on **your promise** — nothing is checked'
+        correct: true
+      - 'Replaces the `T[]` with a type-safe `List<T>` at runtime'
+    explain: 'It is documentation plus warning-suppression, valid only on methods that cannot be overridden (`static`, `final`, `private`). If the method stores into the array or leaks it, `@SafeVarargs` happily hides a real bug.'
+  - q: 'Why does the compiler generate a bridge method for `class Money implements Comparable<Money>`?'
+    options:
+      - 'To speed up `compareTo` via inlining'
+      - text: 'The interface erases to `compareTo(Object)`, so a synthetic `compareTo(Object)` must delegate to your `compareTo(Money)` to preserve overriding'
+        correct: true
+      - 'To allow comparing `Money` with any `Object` safely'
+    explain: 'Without the bridge, your `compareTo(Money)` would merely *overload* the erased `compareTo(Object)` and polymorphic dispatch through `Comparable` would break. Bridges are why you sometimes see duplicate-looking methods in stack traces and `Method.isBridge()` in reflection.'
+```
+
 :::key
 Generics are erased to their bound (or `Object`) at compile time, so at runtime there is no `T`: you cannot do `new T()`, `new T[]`, or `instanceof List<String>`. The compiler hides this with casts and bridge methods. Reifiable types keep their info while parameterized ones do not — which is why generic varargs risk heap pollution and may need `@SafeVarargs`.
 :::

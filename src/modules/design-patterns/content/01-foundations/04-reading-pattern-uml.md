@@ -104,6 +104,38 @@ Numbers near the ends of an association say **how many** objects participate.
 
 So `Canvas "1" o-- "*" Shape` reads: *one Canvas aggregates many Shapes.*
 
+## Reading a sequence diagram
+
+Class diagrams show **structure**; behavioral patterns (Observer, Command, Chain of
+Responsibility) also come with a **sequence diagram** showing *who calls whom, in what order*.
+Three rules decode any of them:
+
+1. **Time flows downward.** Each vertical line is one object's lifeline.
+2. **Solid arrow = call, dashed arrow = return.** `A->>B: doWork()` then `B-->>A: result`.
+3. **A message to yourself** (`S->>S: state = x`) is internal work.
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant S as Subject
+    participant O as Observer
+    C->>S: setState(42)
+    S->>S: store new state
+    S->>O: update(42)
+    O-->>S: return
+    S-->>C: return
+```
+
+Read it as a sentence: *the client sets state; the subject stores it, then calls each observer
+before returning.* If you can narrate the diagram aloud, you understand the pattern's collaboration.
+
+:::gotcha
+Interviewers often test **aggregation vs composition**. The diamond sits on the **whole** (owner)
+side, not the part. Hollow diamond (`o--`) = the part can outlive the whole (a `Shape` survives its
+`Canvas`); filled diamond (`*--`) = the part dies with the whole (a `Point` belongs to one
+`Circle`). If lifetime is independent, it is aggregation — no matter how "owned" it feels.
+:::
+
 ## UML notation flashcards
 
 ```flashcards

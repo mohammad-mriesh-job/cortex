@@ -24,6 +24,15 @@ A single class that knows and does everything — thousands of lines, dozens of 
 
 **Fix:** extract cohesive collaborators. A `OrderManager` doing pricing, persistence, email, and validation becomes `Pricer`, `OrderRepository`, `Notifier`, and `OrderValidator` — each independently testable.
 
+```mermaid
+flowchart TD
+    G["OrderManager: pricing + persistence + email + validation"]
+    G -->|"extract by responsibility"| P["Pricer"]
+    G --> R["OrderRepository"]
+    G --> N["Notifier"]
+    G --> V["OrderValidator"]
+```
+
 ## Stringly-typed code
 
 Using `String` (or bare `int`) for values that actually have a small, fixed domain. The compiler can't help you; a typo surfaces only at runtime.
@@ -104,6 +113,34 @@ Most of these fixes converge on immutable, well-typed objects. Immutable objects
 
 ```java
 record Money(BigDecimal amount, Currency currency) { }   // immutable value object
+```
+
+## Check yourself
+
+```quiz
+title: Anti-patterns
+questions:
+  - q: 'What is the fix for a God class?'
+    options:
+      - text: 'Extract cohesive collaborators, each with a single responsibility'
+        correct: true
+      - 'Split it into more methods in the same class'
+      - 'Make all of its fields `private`'
+    explain: 'A God class violates SRP — it changes for many reasons. Extracting focused collaborators (Pricer, Repository, Notifier, Validator) makes each independently testable and localizes change.'
+  - q: 'Which is a recognized `Optional` anti-pattern?'
+    options:
+      - text: 'Using `Optional` as a field or method parameter'
+        correct: true
+      - 'Returning `Optional` from a lookup method'
+      - 'Chaining `map` on an `Optional`'
+    explain: '`Optional` is designed as a *return type* for maybe-absent results. As a field it wastes a wrapper and isn''t `Serializable`; as a parameter it forces every caller to wrap. Use a nullable field/param or a default instead.'
+  - q: 'What is the disciplined response to a *suspected* performance problem?'
+    options:
+      - text: 'Profile to find the real hotspot, then benchmark a fix with JMH'
+        correct: true
+      - 'Rewrite the hottest-looking loop by hand immediately'
+      - 'Replace every `ArrayList` with a raw array'
+    explain: 'Guess-driven micro-optimization obscures intent and often loses to the JIT. Measure first (async-profiler, JFR), fix the ~3% that''s actually hot, and verify with JMH — naive `nanoTime` loops lie due to warm-up and dead-code elimination.'
 ```
 
 :::key

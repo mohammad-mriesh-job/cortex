@@ -95,6 +95,24 @@ tabs:
       cores**. The sweet spot is about the number of cores; extra threads only add switching cost.
 ````
 
+The classification drives every sizing decision you will make later in this track:
+
+```mermaid
+flowchart TD
+  Q{"What does the task spend its time on?"}
+  Q -->|"waiting: network, disk, DB"| IO["IO-bound"]
+  Q -->|"computing: CPU busy the whole time"| CPU["CPU-bound"]
+  IO --> IO1["Concurrency: run far more tasks than cores"]
+  IO1 --> IO2["Java 21: a virtual thread per task"]
+  CPU --> P1["Parallelism: about one thread per core"]
+  P1 --> P2["Fixed pool sized to core count"]
+```
+
+This is also the modern Java 21 answer: **IO-bound** workloads map naturally onto **virtual
+threads** (one cheap thread per task, blocking is fine), while **CPU-bound** workloads still want a
+**platform-thread pool sized to the core count** — virtual threads add nothing when every task pegs
+a core, because the limiting resource is hardware, not thread bookkeeping.
+
 :::gotcha
 "More threads = faster" is a myth. For **CPU-bound** work on a single core, extra threads just
 time-slice one busy CPU and *add* context-switch overhead — throughput can go **down**. Parallel

@@ -307,6 +307,223 @@ Beyond indexes: reduce the rows and columns you fetch (avoid \`SELECT *\`), make
 Reach for replication first — it is simpler and solves the common read-heavy case. Shard only when a single primary can no longer hold the write volume or data size, and choose the shard key carefully: a poor key creates **hotspots** and forces expensive **cross-shard** joins and transactions. The two are often combined: each shard is itself replicated.
 :::`,
   },
+  {
+    id: 'db-iq-sql-methodology',
+    question: "You're asked to write a SQL query in an interview. How do you approach it?",
+    difficulty: 'Medium',
+    category: 'Interview Prep',
+    tags: ['methodology', 'process', 'query-writing'],
+    answer: `Show a **method** out loud — interviewers grade the process as much as the final query:
+
+1. **Restate & clarify** — confirm the tables and the **grain** ("one row per order, or per line item?"). Ask about NULLs, ties, and duplicates *before* writing.
+2. **Sketch sample rows** — a tiny input plus expected output pins the semantics and catches misunderstandings early.
+3. **Build incrementally** — start with \`FROM\`/\`JOIN\`, then \`WHERE\`, then \`GROUP BY\`, then the \`SELECT\` expressions. Don't write it all at once.
+4. **Handle edge cases** — empty result, NULLs (three-valued logic), ties (\`ROW_NUMBER\` vs \`RANK\`), and no-match (\`INNER\` vs \`LEFT\`).
+5. **Sanity-check** — re-read against your sample; verify a join didn't fan out the grain.
+
+:::key
+Narrate every step. A candidate who says "let me confirm the grain and how to handle ties" signals seniority more than one who silently writes a clever one-liner that mishandles NULLs.
+:::`,
+  },
+  {
+    id: 'db-iq-sql-red-flags',
+    question: 'What SQL red flags do interviewers watch for?',
+    difficulty: 'Medium',
+    category: 'Interview Prep',
+    tags: ['red-flags', 'best-practices', 'performance'],
+    answer: `Habits that signal inexperience:
+
+- **\`SELECT *\`** in application queries — pulls unused columns, defeats covering indexes, and breaks silently when the schema changes.
+- **Guessing at indexes** without running \`EXPLAIN\` — adding one before seeing the plan.
+- **Functions on indexed columns** in \`WHERE\` (\`YEAR(col) = 2024\`) that make the predicate non-sargable and kill index use.
+- **N+1 queries** hidden inside an ORM loop.
+- **\`UPDATE\`/\`DELETE\` without a \`WHERE\`** (or without first testing the \`WHERE\` as a \`SELECT\`).
+- **Ignoring NULLs/ties** — \`NOT IN\` over a nullable subquery, or assuming a "max" is unique.
+- **Cartesian joins** from a missing or wrong join condition (fan-out).
+
+:::senior
+The meta red flag is **not measuring** — guessing at performance instead of using \`EXPLAIN ANALYZE\` and the slow log. Saying "I'd check the query plan first" instantly turns a red flag green.
+:::`,
+  },
+  {
+    id: 'db-iq-dialect-awareness',
+    question: 'How do you show dialect-awareness in a SQL interview?',
+    difficulty: 'Easy',
+    category: 'Interview Prep',
+    tags: ['dialects', 'portability', 'postgres', 'mysql'],
+    answer: `Acknowledge that SQL is not perfectly portable and name the engine's conventions:
+
+| Concept | PostgreSQL | MySQL | SQL Server |
+|---|---|---|---|
+| Limit rows | \`LIMIT n\` | \`LIMIT n\` | \`TOP n\` / \`OFFSET FETCH\` |
+| Upsert | \`ON CONFLICT\` | \`ON DUPLICATE KEY\` | \`MERGE\` |
+| Auto id | \`SERIAL\` / \`IDENTITY\` | \`AUTO_INCREMENT\` | \`IDENTITY\` |
+| Case-insensitive match | \`ILIKE\` | ci collation | ci collation |
+| Return inserted row | \`RETURNING\` | \`SELECT\` after | \`OUTPUT\` |
+
+Also flag: default isolation (Postgres \`READ COMMITTED\` vs InnoDB \`REPEATABLE READ\`), string concat (\`||\` vs \`CONCAT()\`), boolean type (native vs \`TINYINT\`), and \`NULLS FIRST/LAST\` ordering.
+
+:::senior
+You don't need to memorize every dialect — say "in Postgres I'd use \`RETURNING\`; the MySQL equivalent is a follow-up \`SELECT\`" to show you know portability has limits. Write standard SQL where you can, and flag the vendor-specific parts.
+:::`,
+  },
+  {
+    id: 'db-iq-internals-depth-by-level',
+    question: 'How deep should database knowledge go for junior vs senior roles?',
+    difficulty: 'Medium',
+    category: 'Interview Prep',
+    tags: ['leveling', 'expectations', 'career'],
+    answer: `Expectations scale with level:
+
+- **Junior** — write correct SQL (joins, \`GROUP BY\`, subqueries), understand PK/FK and normalization basics, know an index speeds reads.
+- **Mid** — read an \`EXPLAIN\` plan, compose indexes (composite, covering), understand transactions and isolation levels, fix N+1, know when to denormalize.
+- **Senior** — reason about MVCC, locking/deadlocks, the WAL and durability, the cost-based optimizer and statistics, replication lag/consistency, and sharding/partitioning trade-offs; make and defend schema decisions.
+- **Staff+** — data architecture across services, storage-engine trade-offs (B-tree vs LSM), migration strategy at scale, right datastore per workload.
+
+:::key
+Depth compounds: seniors explain **why** (mechanisms and trade-offs), not just **what**. When unsure, reason from fundamentals ("a B-tree is sorted, so a leading wildcard can't seek") rather than reciting memorized facts.
+:::`,
+  },
+  {
+    id: 'db-iq-second-highest',
+    question: 'Classic screening question: find the second-highest salary.',
+    difficulty: 'Easy',
+    category: 'Interview Prep',
+    tags: ['query-patterns', 'subquery', 'drills'],
+    answer: `The go-to is the subquery form — one value, NULL-safe:
+
+\`\`\`sql
+SELECT MAX(salary) AS second_highest
+FROM employees
+WHERE salary < (SELECT MAX(salary) FROM employees);
+\`\`\`
+
+Alternatives worth naming:
+
+\`\`\`sql
+-- window function
+SELECT DISTINCT salary FROM (
+  SELECT salary, DENSE_RANK() OVER (ORDER BY salary DESC) AS rnk FROM employees
+) t WHERE rnk = 2;
+
+-- LIMIT / OFFSET (MySQL / Postgres)
+SELECT DISTINCT salary FROM employees ORDER BY salary DESC LIMIT 1 OFFSET 1;
+\`\`\`
+
+:::gotcha
+The favorite follow-up: "what if there is **no** second salary, or the top is tied?" The \`MAX\`-subquery returns \`NULL\` cleanly; the \`LIMIT\` form returns **zero rows**. Confirm whether "second highest" means the second **distinct** amount (usually yes → \`DENSE_RANK\`) or the second row.
+:::`,
+  },
+  {
+    id: 'db-iq-nth-highest-salary',
+    question: 'Generalize it: find the Nth-highest salary, and talk through your reasoning.',
+    difficulty: 'Medium',
+    category: 'Interview Prep',
+    tags: ['query-patterns', 'dense-rank', 'drills'],
+    answer: `State the go-to, then show you know the alternatives and edges (N = 3):
+
+\`\`\`sql
+-- go-to: DENSE_RANK, the Nth *distinct* salary
+SELECT DISTINCT salary FROM (
+  SELECT salary, DENSE_RANK() OVER (ORDER BY salary DESC) AS rnk
+  FROM employees
+) t WHERE rnk = 3;
+
+-- portable no-window fallback: distinct salaries, skip N-1
+SELECT DISTINCT salary FROM employees
+ORDER BY salary DESC OFFSET 2 ROWS FETCH NEXT 1 ROW ONLY;  -- MySQL: LIMIT 1 OFFSET 2
+\`\`\`
+
+Talking points that score:
+
+- **Ties** — \`DENSE_RANK\` treats equal salaries as one rank, which is what "Nth highest" usually means.
+- **Edge** — if N exceeds the distinct-salary count, the result is **empty**; say so.
+- **Duplicates** — \`DISTINCT\` (or the rank) stops the same salary appearing twice.
+
+:::senior
+This appears in nearly every SQL screen. Prepared candidates have a clean \`DENSE_RANK\` answer **plus** a window-free fallback for the "no window functions allowed" twist.
+:::`,
+  },
+  {
+    id: 'db-iq-a-not-b',
+    question: 'Find rows in table A that have no match in table B (an anti-join).',
+    difficulty: 'Medium',
+    category: 'Interview Prep',
+    tags: ['anti-join', 'not-exists', 'query-patterns', 'drills'],
+    answer: `Three canonical solutions — know all three and when each is safe:
+
+\`\`\`sql
+-- 1) NOT EXISTS — preferred: NULL-safe, usually optimal
+SELECT a.* FROM a
+WHERE NOT EXISTS (SELECT 1 FROM b WHERE b.a_id = a.id);
+
+-- 2) LEFT JOIN / IS NULL — the classic anti-join
+SELECT a.* FROM a
+LEFT JOIN b ON b.a_id = a.id
+WHERE b.a_id IS NULL;
+
+-- 3) EXCEPT — whole-row set difference (also dedups)
+SELECT id FROM a EXCEPT SELECT a_id FROM b;
+\`\`\`
+
+:::gotcha
+**Avoid \`NOT IN\` here** — if the subquery returns any \`NULL\`, \`NOT IN\` yields **no rows** (three-valued logic). \`NOT EXISTS\` and \`LEFT JOIN ... IS NULL\` are NULL-safe. \`EXCEPT\` compares whole rows and removes duplicates, which may not be what you want. \`NOT EXISTS\` and the anti-join usually plan identically — pick \`NOT EXISTS\` for clarity.
+:::`,
+  },
+  {
+    id: 'db-iq-find-duplicates',
+    question: 'Find duplicate rows, then delete all but one — how do you do both?',
+    difficulty: 'Medium',
+    category: 'Interview Prep',
+    tags: ['duplicates', 'delete', 'row-number', 'drills'],
+    answer: `Find with \`GROUP BY ... HAVING\`; delete keeping one with \`ROW_NUMBER\`:
+
+\`\`\`sql
+-- find: which emails appear more than once, and how often
+SELECT email, COUNT(*) AS n
+FROM users GROUP BY email HAVING COUNT(*) > 1;
+
+-- delete duplicates, keep the lowest id per email
+WITH d AS (
+  SELECT id, ROW_NUMBER() OVER (PARTITION BY email ORDER BY id) AS rn
+  FROM users
+)
+DELETE FROM users WHERE id IN (SELECT id FROM d WHERE rn > 1);
+\`\`\`
+
+Talking points: define "duplicate" (which columns?), choose which copy to keep (lowest id, or most recent), and add a \`UNIQUE\` constraint afterward so they cannot recur.
+
+:::gotcha
+MySQL won't let you \`DELETE\` from a table you subquery **directly** on itself — wrap the inner \`SELECT\` in a derived table, or use the \`ROW_NUMBER\`/CTE form (MySQL 8+).
+:::`,
+  },
+  {
+    id: 'db-iq-consecutive-logins',
+    question: 'Find users who logged in on 3 or more consecutive days.',
+    difficulty: 'Hard',
+    category: 'Interview Prep',
+    tags: ['gaps-and-islands', 'window-functions', 'dates', 'drills'],
+    answer: `A gaps-and-islands problem. Within a streak, \`(date − row_number days)\` is constant, so it becomes a group key:
+
+\`\`\`sql
+WITH runs AS (
+  SELECT user_id, login_date,
+         login_date - (ROW_NUMBER() OVER (PARTITION BY user_id
+                       ORDER BY login_date)) * INTERVAL '1 day' AS grp
+  FROM (SELECT DISTINCT user_id, login_date FROM logins) d
+)
+SELECT user_id, MIN(login_date) AS streak_start, COUNT(*) AS streak_len
+FROM runs
+GROUP BY user_id, grp
+HAVING COUNT(*) >= 3;
+\`\`\`
+
+Explain it aloud: \`DISTINCT\` first (two logins in a day must not double-count); order per user; the subtraction collapses each unbroken run to one \`grp\`; \`HAVING\` filters by streak length.
+
+:::senior
+The "subtract a row number to detect runs" idiom is the key insight — the same pattern solves any consecutive-anything (streaks, sessions, contiguous id ranges). If window functions are banned, fall back to a self-join comparing each day to the prior one.
+:::`,
+  },
 ];
 
 export default questions;

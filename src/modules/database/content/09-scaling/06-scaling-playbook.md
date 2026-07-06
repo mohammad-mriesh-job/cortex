@@ -16,18 +16,13 @@ Each rung is more work and less reversible than the one below it. Exhaust the ch
 
 ```mermaid
 flowchart TD
-    S["Slow / overloaded database"] --> R0
-    R0["0 · MEASURE<br/>profile: slow-query log, EXPLAIN, metrics"] --> R1
-    R1["1 · Optimize queries + INDEXES<br/>cheapest, biggest win"] --> R2
-    R2["2 · CACHE hot reads<br/>Redis / cache-aside"] --> R3
-    R3["3 · READ REPLICAS<br/>fan out read traffic"] --> R4
-    R4["4 · Vertical scale<br/>bigger box (buys time)"] --> R5
-    R5["5 · PARTITION / SHARD<br/>last resort — splits writes"] --> Done["Scaled"]
-    style R1 fill:#d5f5e3,color:#000
-    style R2 fill:#d5f5e3,color:#000
-    style R3 fill:#abebc6,color:#000
-    style R5 fill:#f5b7b1,color:#000
-    style R0 fill:#f8981d,color:#000
+    S["Slow / overloaded database"] --> R0["0. MEASURE — slow-query log, EXPLAIN, metrics"]
+    R0 --> R1["1. Optimize queries and indexes (cheapest, biggest win)"]
+    R1 --> R2["2. Cache hot reads (Redis, cache-aside)"]
+    R2 --> R3["3. Read replicas — fan out read traffic"]
+    R3 --> R4["4. Vertical scale — bigger box, buys time"]
+    R4 --> R5["5. Partition / shard — last resort, splits writes"]
+    R5 --> Done["Scaled"]
 ```
 
 :::key
@@ -81,11 +76,10 @@ Opening a DB connection is expensive (TCP + TLS + auth), and every connection co
 
 ```mermaid
 flowchart LR
-    A1["Request 1"] --> P
+    A1["Request 1"] --> P["Connection pool — small, fixed set of warm conns"]
     A2["Request 2"] --> P
     A3["Request N"] --> P
-    P["Connection Pool<br/>(small, fixed set of warm conns)"] --> DB[("Database")]
-    style P fill:#d6eaf8,color:#000
+    P --> DB[("Database")]
 ```
 
 :::gotcha
@@ -105,8 +99,21 @@ flowchart TD
     Q2 -->|No| Q3{"Write-bound / data too big?"}
     Q3 -->|Yes| SHARD["Vertical scale to buy time, then shard"]
     Q3 -->|No| POOL["Check connection pool sizing / limits"]
-    style Q0 fill:#f8981d,color:#000
-    style SHARD fill:#f5b7b1,color:#000
+```
+
+```flashcards
+title: Playbook recall
+cards:
+  - front: 'The scaling ladder, in order?'
+    back: '**Measure → indexes/query fixes → cache → read replicas → vertical scale → shard.** Cheap and reversible first.'
+  - front: 'The only rung that scales WRITE throughput horizontally?'
+    back: '**Partitioning/sharding** — caching and replicas offload reads only.'
+  - front: 'Rule-of-thumb connection pool size?'
+    back: 'Small — roughly `cores × 2 + effective_spindles`, often **under ~20**. The pool is the backpressure point protecting the DB.'
+  - front: 'Why is sharding "last resort"?'
+    back: 'It''s **hard to reverse** and buys cross-shard joins, rebalancing, and distributed-transaction pain — only worth it when writes/data outgrow one primary.'
+  - front: 'Serverless app + per-instance pools = ?'
+    back: 'Connection explosion (100 instances × 20 conns = 2000). Front the DB with a **proxy pooler** (PgBouncer, RDS Proxy).'
 ```
 
 ## Check yourself

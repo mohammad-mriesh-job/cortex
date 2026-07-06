@@ -118,6 +118,33 @@ Car c = a;           // NOT a new object — c points at the same one as a
 The stack/heap details are covered in **Objects in Memory**.
 :::
 
+## What a class is at runtime
+
+A class is not only a compile-time idea. The first time it is used, the JVM **loads it once** and
+keeps its metadata — method bytecode, field layout, static fields — in a dedicated region
+(*metaspace* since Java 8). Each object stores only its **own instance field values** plus a small
+header that points back to its class. Methods are **not copied into objects**: there is exactly
+one copy of `accelerate()`'s code no matter how many million `Car` instances exist.
+
+```java
+Car red = new Car();
+Car blue = new Car();
+red.getClass() == blue.getClass();   // true — both point at the ONE loaded Car class
+Class<Car> meta = Car.class;         // the class itself is an object you can inspect
+```
+
+The misconception interviewers probe: *"an object is a copy of the class."* It is not — an object
+holds only field values and an identity; the method code and type information live once, in the
+class. The follow-up "so where do methods live — inside each object?" catches anyone who
+memorised the blueprint metaphor without the memory model behind it.
+
+:::senior
+`Car.class` is itself an object — an instance of `java.lang.Class<Car>` — which is what makes
+reflection possible: Spring and Hibernate read that metadata at runtime to construct and wire your
+objects. The shared-method-table model also explains a practical asymmetry: adding a **method**
+costs nothing per instance, while adding a **field** costs memory in *every* object of the class.
+:::
+
 ## Check yourself
 
 ```quiz

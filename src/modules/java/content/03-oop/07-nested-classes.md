@@ -119,6 +119,32 @@ flowchart TD
 Use a **lambda** for short, stateless functional-interface implementations (the overwhelmingly common case). Reach for an **anonymous class** when you need state, multiple methods, or to subclass — and a **named (static nested or top-level) class** once the logic is reused or complex enough to deserve testing and a name. Default to `static` nesting to avoid accidental outer-instance capture.
 :::
 
+```quiz
+title: Check yourself
+questions:
+  - q: 'A long-lived cache stores instances of a non-static inner class. What is the hidden cost?'
+    options:
+      - 'Each instance is duplicated once per outer object'
+      - text: 'Each instance pins its entire enclosing object in memory — a classic leak'
+        correct: true
+      - 'None — inner classes are garbage-collected independently'
+    explain: 'Every inner-class instance carries a synthetic `Outer.this` reference. As long as the inner object is reachable, so is the whole outer object (and everything *it* references). If the outer instance isn''t needed, declare the nested class `static`.'
+  - q: 'Inside a **lambda**, what does `this` refer to?'
+    options:
+      - 'The lambda object itself'
+      - text: 'The enclosing instance where the lambda is written'
+        correct: true
+      - 'It is a compile error to use `this` in a lambda'
+    explain: 'Lambdas have no `this` of their own — they lexically inherit the enclosing instance. An **anonymous class** is the opposite: its `this` is the anonymous object. This is a favourite "spot the difference" interview question.'
+  - q: 'Why must a captured local variable be final or effectively final?'
+    options:
+      - 'The JVM cannot read non-final variables from another stack frame'
+      - text: 'The value is **copied** at capture time; allowing later reassignment would let the copy and the original silently diverge'
+        correct: true
+      - 'It is a performance optimization only'
+    explain: 'Locals live on the stack and may be gone when the lambda runs later, so Java copies the value into the lambda/class instance. Freezing the variable keeps the copy and original trivially consistent. (Instance fields are *not* subject to this rule — the object reference is captured instead.)'
+```
+
 :::key
 Four nesting forms: **static nested** (no outer link), **inner** (holds an outer instance — leak risk), **local** (method-scoped), and **anonymous** (inline, nameless). Captured locals must be effectively final. Prefer a **lambda** over an anonymous class for single-method interfaces, and prefer `static` nesting unless you truly need the enclosing instance.
 :::

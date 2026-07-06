@@ -42,8 +42,10 @@ phaser.arriveAndDeregister();           // main bows out; workers run on
 ```
 
 - `register()` / `bulkRegister(n)` — add parties (even mid-run).
+- `arrive()` — record arrival **without waiting**; keep working and sync up later.
 - `arriveAndAwaitAdvance()` — arrive and block until the phase completes.
 - `arriveAndDeregister()` — arrive and permanently leave (party count drops).
+- `awaitAdvance(phase)` — wait for a phase to end **without being a party** (observer).
 - `onAdvance(phase, parties)` — override to run logic between phases or to end the phaser.
 
 ```mermaid
@@ -52,6 +54,122 @@ stateDiagram-v2
     Phase0 --> Phase1 : all registered parties arrive
     Phase1 --> Phase2 : all arrive
     Phase2 --> [*] : onAdvance returns true / no parties left
+```
+
+## The counters underneath
+
+A `Phaser` tracks three numbers: **registered** parties, **arrived**, and **unarrived**
+(`registered - arrived`), plus the current **phase number** (starts at 0, increments on each
+advance, wraps at `Integer.MAX_VALUE`; it goes negative only when the phaser terminates). The
+mechanics of one phase, step by step:
+
+```walkthrough
+title: One phase of a 3-party Phaser
+code: |
+  Phaser ph = new Phaser(3);          // 3 registered parties
+  // each worker: ph.arriveAndAwaitAdvance();
+steps:
+  - text: 'Phase **0** begins: registered = 3, so **unarrived = 3**. All workers are computing.'
+    array: [0, 3, 'all running']
+    pointers: { 0: 'phase', 1: 'unarrived', 2: 'event' }
+    line: 1
+  - text: '**T1 arrives** — unarrived drops to 2. T1 parks in `WAITING` inside `arriveAndAwaitAdvance()`.'
+    array: [0, 2, 'T1 parked']
+    highlight: [1]
+    pointers: { 0: 'phase', 1: 'unarrived', 2: 'event' }
+    line: 2
+  - text: '**T2 arrives** — unarrived 1. Two parked, one still working. Nobody advances yet.'
+    array: [0, 1, 'T2 parked']
+    highlight: [1]
+    pointers: { 0: 'phase', 1: 'unarrived', 2: 'event' }
+    line: 2
+  - text: '**T3 arrives last** — unarrived would hit 0, which triggers the advance. **T3 itself runs `onAdvance(0, 3)`** before anyone is released.'
+    array: [0, 0, 'T3 runs onAdvance']
+    highlight: [1, 2]
+    pointers: { 0: 'phase', 1: 'unarrived', 2: 'event' }
+    line: 2
+  - text: '`onAdvance` returns false → the phaser **advances**: phase becomes **1**, unarrived resets to registered (3), and all parked parties are released together.'
+    array: [1, 3, 'all released']
+    highlight: [0, 1]
+    pointers: { 0: 'phase', 1: 'unarrived', 2: 'event' }
+    line: 2
+  - text: 'Round two runs on the **same phaser** — no reset call, and parties may `register()` or `arriveAndDeregister()` before the next rendezvous. That dynamism is the whole point.'
+    array: [1, 3, 'phase 1 running']
+    sorted: [0, 1, 2]
+    pointers: { 0: 'phase', 1: 'unarrived', 2: 'event' }
+    line: 2
+```
+
+## One tool, three shapes
+
+Because arrival and waiting are separate operations, a `Phaser` can impersonate both of its cousins:
+
+````tabs
+tabs:
+  - label: As a CountDownLatch
+    body: |
+      A one-shot start gate: workers wait for the main thread's single arrival.
+      ```java
+      Phaser gate = new Phaser(1);              // main is the only party
+      // worker: gate.awaitAdvance(gate.getPhase());   // wait, not a party
+      // main:   gate.arriveAndDeregister();           // opens the gate for all
+      ```
+      Unlike a latch, you could reuse it for a *second* round if needed.
+  - label: As a CyclicBarrier
+    body: |
+      N fixed parties rendezvous per round — same behavior, no `BrokenBarrierException`.
+      ```java
+      Phaser barrier = new Phaser(N);
+      // each worker, per round:
+      barrier.arriveAndAwaitAdvance();
+      ```
+      The "barrier action" becomes `onAdvance`, run by the **last arriver**.
+  - label: As itself — dynamic phases
+    body: |
+      Parties join and leave mid-computation; each stage is a numbered phase.
+      ```java
+      phaser.register();                 // a new worker joins mid-run
+      phaser.arriveAndAwaitAdvance();    // finish this stage with everyone
+      phaser.arriveAndDeregister();      // leave; others continue
+      ```
+      No other synchronizer supports a changing party count.
+````
+
+**Scaling note — tiering:** with hundreds of parties, every arrival CASes the same state word.
+`new Phaser(parent)` builds a **tree of phasers**: children advance independently and only
+propagate to the parent, cutting contention for very large party counts — a design no latch or
+barrier offers.
+
+:::gotcha
+Three phaser-specific traps. **(1) The forgotten main party:** `new Phaser(1)` registers the
+*constructing* thread's slot — if main never calls `arriveAndDeregister()`, every phase waits for a
+party that never arrives and all workers hang. **(2) Over-arrival:** calling `arrive()` when there
+are no unarrived parties throws `IllegalStateException` — arrivals must match registrations.
+**(3) Interrupts are ignored:** `arriveAndAwaitAdvance()` does **not** respond to interruption
+(unlike `CyclicBarrier.await`, which throws and *breaks* the barrier) — if you need cancellable
+waiting, use `awaitAdvanceInterruptibly(phase)`.
+:::
+
+## Drill: the synchronizer toolbox
+
+The five coordination classes in one recall pass — interviewers love "which synchronizer would you
+use for X?".
+
+```flashcards
+title: 'Synchronizers: one-line purpose'
+cards:
+  - front: '`CountDownLatch`'
+    back: '**One-shot gate**: N `countDown()` events release all `await()`ers. Cannot be reset — threads wait for *events*, not for each other.'
+  - front: '`CyclicBarrier`'
+    back: '**Fixed-N rendezvous, reusable**: all N threads `await()` each round; last arrival runs the barrier action. Breaks (`BrokenBarrierException`) if a waiter is interrupted or times out.'
+  - front: '`Semaphore`'
+    back: '**N permits bounding concurrent access**: `acquire()`/`release()`. No ownership — any thread may release, which enables handoff designs (and enables bugs).'
+  - front: '`Phaser`'
+    back: '**Reusable multi-phase barrier with dynamic parties**: `register()`/`arriveAndDeregister()` at runtime; the last arriver runs `onAdvance`. Tierable for huge party counts.'
+  - front: '`Exchanger`'
+    back: '**Pairwise swap**: exactly two threads meet at `exchange(x)` and each receives the other''s object — e.g. swapping a full buffer for an empty one.'
+  - front: 'Latch vs barrier in one line?'
+    back: 'A **latch** waits for *events* (workers count down and move on); a **barrier** waits for *threads* (everyone waits for everyone). Latch = one-shot; barrier = per-round.'
 ```
 
 :::senior

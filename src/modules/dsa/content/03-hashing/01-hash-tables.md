@@ -16,7 +16,7 @@ array index, so `get`, `put`, and `contains` all become "compute an index, look 
 
 ```mermaid
 flowchart LR
-  K["key<br/>&quot;cat&quot;"] -->|hashCode| H["hash = 8291"]
+  K["key: cat"] -->|hashCode| H["hash = 8291"]
   H -->|"hash % capacity"| I["index = 3"]
   I --> B["buckets[3]"]
 ```
@@ -156,6 +156,23 @@ In an interview, say "**O(1) average**" for hash operations, never a flat "O(1)"
 know the worst case (all collisions → O(n)) and the amortized cost of resizing. That nuance is
 what separates a memorized answer from real understanding.
 :::
+
+## Recall
+
+```flashcards
+title: Hash table facts
+cards:
+  - front: '`get` / `put` / `remove` on a hash table'
+    back: '**O(1) average**, O(n) worst (all keys in one bucket). Java 8+ treeifies long chains → O(log n) worst.'
+  - front: 'Separate chaining vs open addressing'
+    back: '**Chaining**: list/tree per bucket (Java `HashMap`). **Open addressing**: probe within the array — better cache locality, suffers clustering, deletes need tombstones.'
+  - front: 'Load factor and Java''s resize trigger'
+    back: '`entries / buckets`. Java resizes (doubles + rehashes) when it crosses **0.75**.'
+  - front: 'The equals/hashCode contract'
+    back: 'Equal objects **must** share a hashCode. Break it → duplicates stored, lookups miss.'
+  - front: 'Cost of one resize, and why inserts stay O(1)'
+    back: 'A resize rehashes all n entries — **O(n)** — but doubling makes it rare, so inserts are **amortized O(1)**.'
+```
 
 ## Check yourself
 

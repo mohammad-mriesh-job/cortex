@@ -10,6 +10,17 @@ tags: mockito, mocking, testing, stubbing, verify
 
 A unit test should exercise **one** class. But that class usually depends on others — a repository, an HTTP client, a clock. **Mockito** lets you replace those collaborators with controllable stand-ins so the test stays fast, deterministic, and focused on the logic you actually wrote.
 
+A Mockito test follows a fixed rhythm — stub the inputs, run the code, then assert on the outputs (return value, or interactions for `void`):
+
+```mermaid
+flowchart TD
+    A["mock(Type.class): fake returning zero-values"] --> B["Stub inputs: when(m.call()).thenReturn(x)"]
+    B --> C["Exercise the class under test"]
+    C --> D{"Does the method return a value?"}
+    D -->|yes| E["Assert on the returned value"]
+    D -->|"void / side effect"| F["verify(m).call(args) or ArgumentCaptor"]
+```
+
 ## Stubbing: mock, when, thenReturn
 
 `mock()` creates a fake implementation of a type. By default every method returns a *zero value* (`null`, `0`, `false`, empty collection). You then **stub** the calls you care about with `when(...).thenReturn(...)`.
@@ -126,6 +137,34 @@ Mocking types you don't own (a third-party SDK, `LocalDateTime`) couples your te
 :::tip
 `MockitoExtension` runs in **strict stubbing** mode: unused stubs fail the test, catching dead setup and typos early. Keep it on.
 :::
+
+## Check yourself
+
+```quiz
+title: Mockito
+questions:
+  - q: 'Why does `verify(svc).charge(5, anyString())` throw `InvalidUseOfMatchersException`?'
+    options:
+      - text: 'You cannot mix a raw value with a matcher — wrap the literal as `eq(5)`'
+        correct: true
+      - '`anyString()` cannot match a charge amount'
+      - '`verify` accepts only one argument'
+    explain: 'If any argument uses a matcher, all must. Mockito tracks matchers positionally, so a raw `5` beside `anyString()` corrupts that bookkeeping. Write `charge(eq(5), anyString())`.'
+  - q: 'On a spy, why prefer `doReturn(x).when(spy).get(0)` over `when(spy.get(0)).thenReturn(x)`?'
+    options:
+      - text: 'The `when(spy.get(0))` form actually **calls the real** `get(0)` while stubbing — dangerous if it has side effects or throws'
+        correct: true
+      - '`doReturn` is the only form that compiles'
+      - '`doReturn` is faster'
+    explain: 'A spy runs real code unless stubbed, and `when(spy.method())` invokes the real method to set up the stub. The `doReturn(...).when(spy)` form never calls it — the same reason it stubs `void` methods.'
+  - q: 'Which is the best candidate to **mock** in a unit test?'
+    options:
+      - text: 'A slow or non-deterministic collaborator (database, network, clock)'
+        correct: true
+      - 'A value object or record'
+      - 'The class under test itself'
+    explain: 'Mock the awkward boundaries — slow, external, or non-deterministic dependencies and hard-to-trigger error paths. Do not mock simple value objects, types you do not own (wrap them), or the very class you are testing.'
+```
 
 :::key
 Use `when(mock.call()).thenReturn(...)` to control inputs and `verify(mock).call(...)` to assert interactions (especially for `void`). Matchers (`any`, `eq`) are all-or-nothing within a call. `@Mock` + `@InjectMocks` under `MockitoExtension` wires tests cleanly. Spies wrap real objects — stub them with `doReturn(...).when(spy)` to avoid running real code, the same form used to stub `void` methods. Don't mock value objects, types you don't own, or the class under test.

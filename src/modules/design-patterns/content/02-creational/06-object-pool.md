@@ -45,6 +45,45 @@ class ConnectionPool {
 }
 ```
 
+## Enforcing the release
+
+A pool is only as safe as its return path. Wrap the loan in an `AutoCloseable` lease so
+try-with-resources guarantees the return even on exceptions:
+
+```java
+class PooledConnection implements AutoCloseable {
+    private final Connection conn;
+    private final ConnectionPool pool;
+    PooledConnection(Connection c, ConnectionPool p) { this.conn = c; this.pool = p; }
+
+    Connection get() { return conn; }
+    @Override public void close() { pool.release(conn); }   // return, not destroy
+}
+
+try (PooledConnection lease = pool.acquireLease()) {
+    lease.get().prepareStatement("...").execute();
+}   // released here — even if the statement throws
+```
+
+This is exactly what JDBC `DataSource` pools do: the `Connection` your code closes is a **proxy**
+whose `close()` returns the real connection to the pool instead of tearing down the TCP session —
+Object Pool and Proxy composed.
+
+## Sizing the pool
+
+The knob interviewers actually probe. Both directions fail:
+
+| Pool too small | Pool too large |
+|--|--|
+| Callers queue for a resource — latency spikes under load | Idle memory + exhausted DB/OS limits |
+| Deadlock risk when one task holds a resource while waiting for a second | More connections ≠ more throughput once the DB is saturated |
+
+HikariCP's guidance is famously counter-intuitive: a small fixed pool (about
+`cores * 2 + spindles`) outperforms a large one, because beyond hardware parallelism extra
+connections only add context-switching and lock contention on the database side. Start small,
+measure wait time, grow only on evidence. Also set an **acquire timeout** — blocking forever on an
+exhausted pool turns one leak into a full-service outage.
+
 ## Where it shows up
 
 - **Database connection pools** (HikariCP, HikariCP is *the* canonical example) — see [JDBC & transactions](/java/topic/frameworks/transactions-and-jdbc).
@@ -62,6 +101,27 @@ Object Pool is one of the few patterns that is often an **anti-pattern for plain
 :::
 
 Object Pool is sometimes grouped with the GoF creational patterns even though it isn't one of the original 23 — it's a widely-used creational *technique* about **reuse** rather than construction.
+
+## Creational recap — one-line intents
+
+You have now seen the whole creational family. Drill the intents:
+
+```flashcards
+title: Creational patterns → intent
+cards:
+  - front: '**Singleton**'
+    back: 'Guarantee **one instance** with a global access point — prefer `enum` or a DI-managed bean.'
+  - front: '**Factory Method**'
+    back: 'Defer instantiation to a **subclass-overridden hook** — the creator codes against the product interface.'
+  - front: '**Abstract Factory**'
+    back: 'One factory object creates a whole **matching family** of products.'
+  - front: '**Builder**'
+    back: 'Assemble a complex (usually immutable) object **step by step** with named, chained calls.'
+  - front: '**Prototype**'
+    back: 'Create new objects by **copying a configured instance** — beware shallow copies.'
+  - front: '**Object Pool** (non-GoF)'
+    back: '**Reuse** expensive instances via acquire/release — reset on return, enforce release.'
+```
 
 ## Check yourself
 

@@ -178,6 +178,241 @@ The compiler warns on every generic-varargs method. \`@SafeVarargs\` suppresses 
 \`@SafeVarargs\` is **not verified** by the compiler. Apply it only to genuinely safe methods. It is allowed on \`static\`, \`final\`, and (since Java 9) \`private\` methods — those that cannot be overridden into unsafety.
 :::`,
   },
+  {
+    id: 'gen-generic-methods',
+    question: 'How do you write and call a generic method?',
+    difficulty: 'Easy',
+    category: 'Generics',
+    tags: ['generics', 'generic-methods', 'type-inference'],
+    answer: `A **generic method** declares its own type parameter(s) in angle brackets **before the return type**, independent of whether the enclosing class is generic:
+
+\`\`\`java
+static <T> T firstOrNull(List<T> list) {
+    return list.isEmpty() ? null : list.get(0);
+}
+static <K, V> Map<V, K> invert(Map<K, V> in) { /* ... */ }
+\`\`\`
+
+At the call site the compiler **infers** the type arguments from the actual arguments, so you rarely spell them out:
+
+\`\`\`java
+String s = firstOrNull(List.of("a", "b"));   // T inferred as String
+\`\`\`
+
+When inference can't help (e.g. an empty argument list), supply an explicit **type witness**: \`Collections.<String>emptyList()\`.
+
+:::tip
+Most JDK factory methods are generic methods — \`List.of\`, \`Optional.of\`, \`Stream.of\`, \`Collectors.toList\`. A method should be generic (not the class) when the type only needs to flow through **one call**.
+:::`,
+  },
+  {
+    id: 'gen-bounded-type-parameter',
+    question: 'What is a bounded type parameter, and can you have multiple bounds?',
+    difficulty: 'Medium',
+    category: 'Generics',
+    tags: ['generics', 'bounds', 'bounded-type'],
+    answer: `A **bound** restricts what a type parameter can be, which unlocks the bound's API inside the method. \`<T extends Number>\` means "T is \`Number\` or a subtype", so you can call \`Number\` methods on a \`T\`:
+
+\`\`\`java
+static <T extends Number> double sum(List<T> xs) {
+    double total = 0;
+    for (T x : xs) total += x.doubleValue();   // doubleValue() available via the bound
+    return total;
+}
+\`\`\`
+
+**Multiple bounds** use \`&\`. If one bound is a class it must come **first**; the rest are interfaces:
+
+\`\`\`java
+<T extends Number & Comparable<T>>   // a Number that is also Comparable to itself
+\`\`\`
+
+\`extends\` is used for both classes and interfaces here (there is no \`implements\` in a bound).
+
+:::note
+A **bound** (\`<T extends Number>\`, declaration-site) lets you **name and reuse** the type; a **wildcard** (\`? extends Number\`, use-site) is for a one-off unknown type you don't need to name. That's the core "type parameter vs wildcard" decision.
+:::`,
+  },
+  {
+    id: 'gen-diamond-operator',
+    question: 'What is the diamond operator, and how does target typing work?',
+    difficulty: 'Easy',
+    category: 'Generics',
+    tags: ['generics', 'diamond', 'type-inference'],
+    answer: `The **diamond** \`<>\` (Java 7) lets the compiler infer a generic constructor's type arguments from the **target type** on the left, removing redundant repetition:
+
+\`\`\`java
+Map<String, List<Integer>> m = new HashMap<>();   // not new HashMap<String, List<Integer>>()
+\`\`\`
+
+**Target typing** is the general mechanism: the expected type at an assignment, return, or argument position drives inference (it also powers lambdas and method references).
+
+- Java 9 allows \`<>\` with **anonymous classes**.
+- With \`var\` there is no left-hand type to infer from, so \`var list = new ArrayList<>();\` gives \`ArrayList<Object>\` — put the type on one side or the other, not neither.
+
+:::gotcha
+\`List<String> l = new ArrayList();\` (no diamond) compiles with an **unchecked warning** — that's a raw type, not inference. Always write the \`<>\`.
+:::`,
+  },
+  {
+    id: 'gen-wildcard-vs-typeparam',
+    question: 'List<?> vs List<Object> vs raw List — what is the difference?',
+    difficulty: 'Medium',
+    category: 'Generics',
+    tags: ['generics', 'wildcards', 'raw-types'],
+    answer: `They look similar but behave very differently:
+
+| Type | Accepts | Add | Type-safe? |
+|------|---------|-----|-----------|
+| \`List\` (raw) | any \`List\` | anything (unchecked) | **no** — defeats generics |
+| \`List<Object>\` | only \`List<Object>\` | any object | yes, but **invariant** |
+| \`List<?>\` | **any** \`List<X>\` | only \`null\` | yes |
+
+\`\`\`java
+List<?> anyList = List.of(1, 2, 3);   // holds a List<Integer>
+Object o = anyList.get(0);             // reads come back as Object
+// anyList.add(4);                     // compile error — element type unknown
+\`\`\`
+
+- **Raw** exists only for pre-generics compatibility — never use it in new code.
+- \`List<Object>\` is **invariant**: a \`List<String>\` is *not* a \`List<Object>\`, so it accepts almost nothing.
+- \`List<?>\` ("list of some unknown type") is the safe way to accept **any** list when you only read it or don't care about the element type (e.g. \`printAll(List<?> list)\`).`,
+  },
+  {
+    id: 'gen-wildcard-capture',
+    question: 'What is wildcard capture, and what is the capture-helper idiom?',
+    difficulty: 'Hard',
+    category: 'Generics',
+    tags: ['generics', 'wildcards', 'capture'],
+    answer: `When you use a wildcard, the compiler assigns it a fresh, unnameable type variable — the **captured** type (you'll see \`CAP#1\` in error messages). Usually that's invisible, but some operations need to *name* the captured type, and then a raw wildcard method won't compile.
+
+The classic case is swapping two elements of a \`List<?>\`: you can't declare a variable of the unknown element type. The **capture-helper idiom** delegates to a private generic method whose type parameter *captures* the wildcard:
+
+\`\`\`java
+public static void swap(List<?> list, int i, int j) {
+    swapHelper(list, i, j);              // capture happens here
+}
+private static <T> void swapHelper(List<T> list, int i, int j) {
+    T tmp = list.get(i);                 // now the element type has a name: T
+    list.set(i, list.get(j));
+    list.set(j, tmp);
+}
+\`\`\`
+
+The public method keeps the clean \`List<?>\` signature; the helper gives the compiler a real type variable to work with.
+
+:::gotcha
+\`list.set(i, list.get(j))\` directly on a \`List<?>\` fails: \`get\` returns \`CAP#1\` but \`set\` expects \`CAP#1\` and the compiler won't prove they're the same capture. The helper is what unifies them.
+:::`,
+  },
+  {
+    id: 'gen-bridge-methods',
+    question: 'What is a bridge method and why does the compiler generate one?',
+    difficulty: 'Hard',
+    category: 'Generics',
+    tags: ['generics', 'erasure', 'bridge-methods'],
+    answer: `A **bridge method** is a synthetic method the compiler generates to preserve polymorphism **after type erasure**. When a generic supertype is erased, an override's signature can no longer match — so the compiler inserts a bridge that adapts it.
+
+Implement \`Comparable<Money>\` and you write \`compareTo(Money)\`. But the erased interface method is \`compareTo(Object)\`, so the compiler adds:
+
+\`\`\`java
+// You write:
+public int compareTo(Money o) { ... }
+// Compiler generates (invisible):
+public int compareTo(Object o) { return compareTo((Money) o); }  // bridge
+\`\`\`
+
+Bridges are also emitted for **covariant return** overrides. They're flagged \`ACC_BRIDGE | ACC_SYNTHETIC\` — inspect with \`javap\`.
+
+:::senior
+Consequences: a bridge can appear in **stack traces** and confuse **reflection** (\`getMethods()\` returns it; \`Method.isBridge()\` filters it out). The unchecked cast inside a bridge is also how a raw-type call can throw \`ClassCastException\` at a line you never wrote.
+:::`,
+  },
+  {
+    id: 'gen-recursive-generics',
+    question: 'What does <T extends Comparable<T>> mean, and what is a self-bounded type?',
+    difficulty: 'Hard',
+    category: 'Generics',
+    tags: ['generics', 'recursive-bound', 'self-type'],
+    answer: `A **recursive** (self-referential) bound mentions the type parameter inside its own bound. \`<T extends Comparable<T>>\` reads "T is a type comparable **to itself**", which is exactly what you need to write a generic \`max\`:
+
+\`\`\`java
+static <T extends Comparable<T>> T max(List<T> list) {
+    T best = list.get(0);
+    for (T x : list) if (x.compareTo(best) > 0) best = x;
+    return best;
+}
+\`\`\`
+
+The JDK uses it for enums: \`abstract class Enum<E extends Enum<E>>\` guarantees \`compareTo\` and \`getDeclaringClass\` are typed to the concrete enum.
+
+It also enables the **self-type idiom** for fluent hierarchies, so a subclass builder's setters return the subclass, not the base:
+
+\`\`\`java
+abstract class Builder<T extends Builder<T>> {
+    abstract T self();
+    T name(String n) { /* set */ return self(); }   // returns the subtype
+}
+\`\`\`
+
+:::senior
+The real-world signature is even looser — \`Collections.max\` uses \`<T extends Comparable<? super T>>\` so a subtype can reuse an ancestor's \`compareTo\` (PECS applied to \`Comparable\`).
+:::`,
+  },
+  {
+    id: 'gen-generic-arrays',
+    question: "Why can't you create an array of a parameterized type, like new List<String>[10]?",
+    difficulty: 'Medium',
+    category: 'Generics',
+    tags: ['generics', 'arrays', 'reifiable'],
+    answer: `Because arrays and generics have **opposite** type rules and mixing them would defeat both. Arrays are **reifiable** (they know their element type at runtime and throw \`ArrayStoreException\` on a bad store) and **covariant**; generics are **erased** and **invariant**.
+
+If \`new List<String>[]\` were legal, erasure would let heap pollution slip past the runtime array-store check:
+
+\`\`\`java
+List<String>[] a = new List<String>[1];  // (hypothetical) — illegal
+Object[] o = a;                           // covariance
+o[0] = List.of(42);                       // store check passes (all Lists erase alike!)
+String s = a[0].get(0);                   // ClassCastException — silently
+\`\`\`
+
+So \`new T[]\`, \`new List<String>[]\`, and \`new E[]\` are **compile errors**. Workarounds:
+
+- \`(T[]) new Object[n]\` with a localized \`@SuppressWarnings("unchecked")\` (what \`ArrayList\` does internally).
+- \`Array.newInstance(componentClass, n)\` when you have a \`Class\` token.
+- Best: use \`List<List<String>>\` instead of an array of generics.`,
+  },
+  {
+    id: 'gen-class-token',
+    question: 'How do you recover generic type information at runtime despite erasure?',
+    difficulty: 'Medium',
+    category: 'Generics',
+    tags: ['generics', 'erasure', 'type-token', 'reflection'],
+    answer: `Erasure removes \`<T>\` from the bytecode, so \`T.class\` and \`instanceof List<String>\` are impossible. Two idioms pass the type in explicitly instead:
+
+**1. \`Class<T>\` type token** — accept the class as a parameter:
+
+\`\`\`java
+<T> T parse(String json, Class<T> type) { ... }
+parse(body, User.class);          // T carried by the token
+EnumSet.noneOf(Day.class);        // JDK uses the same trick
+\`\`\`
+
+But a \`Class\` can't represent \`List<User>\` — the parameter is erased.
+
+**2. Super type token** — subclass an abstract generic type so the argument is baked into the class's **signature** metadata (which erasure keeps) and read back via \`getGenericSuperclass()\`:
+
+\`\`\`java
+var ref = new TypeReference<List<User>>() {};   // anonymous subclass
+mapper.readValue(json, ref);                     // Jackson reads the full type
+\`\`\`
+
+This is how **Jackson** (\`TypeReference\`), **Spring** (\`ParameterizedTypeReference\`), and **Guava** (\`TypeToken\`) capture full generic types.
+
+:::senior
+The trick works because generic **class/field/method signatures** are retained for reflection — only *local* type arguments (like \`new ArrayList<String>()\`) are truly erased.
+:::`,
+  },
 ];
 
 export default questions;

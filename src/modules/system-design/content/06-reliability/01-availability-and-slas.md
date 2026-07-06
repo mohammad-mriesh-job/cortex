@@ -60,7 +60,7 @@ Here is where candidates stumble. Availability composes differently depending on
 flowchart LR
   subgraph Serial["Serial — a chain (all must be up)"]
     direction LR
-    C1["LB<br/>99.9%"] --> C2["App<br/>99.9%"] --> C3["DB<br/>99.9%"]
+    C1["LB 99.9%"] --> C2["App 99.9%"] --> C3["DB 99.9%"]
   end
 ```
 
@@ -74,9 +74,9 @@ Three "three-nines" components in a chain drop you to 99.7% — roughly *a full 
 
 ```mermaid
 flowchart TD
-  In[Request] --> R1["Replica A<br/>99%"]
-  In --> R2["Replica B<br/>99%"]
-  In --> R3["Replica C<br/>99%"]
+  In[Request] --> R1["Replica A 99%"]
+  In --> R2["Replica B 99%"]
+  In --> R3["Replica C 99%"]
   R1 --> Out[Served if ANY replica is up]
   R2 --> Out
   R3 --> Out

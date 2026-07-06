@@ -113,6 +113,52 @@ A raw type disables generics for the **entire** object, not just the missing arg
 Generics are **invariant**: `List<String>` is *not* a subtype of `List<Object>`, even though `String` is a subtype of `Object`. This surprises newcomers, but it is exactly what keeps the type system sound — if it were allowed, you could add an `Integer` to a `List<Object>` that is really a `List<String>`. Wildcards (the next topic) restore controlled flexibility without breaking safety.
 :::
 
+Trace the disaster invariance prevents — each step *looks* innocent, so the compiler must ban the first one:
+
+```mermaid
+flowchart TD
+    A["List of String strs"] -->|"IF the assignment were legal"| B["List of Object objs = strs"]
+    B --> C["objs.add(42) — fine for a list of Object"]
+    C --> D["String s = strs.get(0)"]
+    D --> E["ClassCastException at runtime"]
+    A -->|"invariance: compile error at the assignment"| F["Bug never ships"]
+```
+
+Arrays, by contrast, **are** covariant (`Object[] arr = new String[1];` compiles) — and pay for it with a runtime `ArrayStoreException` when you store the wrong type. Generics moved that same check to compile time.
+
+```quiz
+title: Check yourself
+questions:
+  - q: 'What does `var list = new ArrayList<>();` infer as the element type?'
+    options:
+      - 'It refuses to compile — the diamond needs a left-hand type'
+      - text: '`Object` — with `var` there is no target type, so the diamond has nothing to infer from'
+        correct: true
+      - 'The type of the first element you add'
+    explain: 'The diamond copies type arguments from the declared variable type; `var` copies the type from the initializer. Combine them and both sides shrug — you get `ArrayList<Object>`. With `var`, spell it out: `var list = new ArrayList<String>();`.'
+  - q: 'Is `List<String>` a subtype of `List<Object>`?'
+    options:
+      - 'Yes — `String` is a subtype of `Object`'
+      - text: 'No — generics are invariant, precisely so a write through the supertype view cannot corrupt the list'
+        correct: true
+      - 'Only for immutable lists'
+    explain: 'If the assignment compiled, `objs.add(42)` would poison a `List<String>` with an `Integer`. Arrays allow the analogous assignment and catch the bug only at runtime (`ArrayStoreException`); generics reject it at compile time.'
+  - q: 'Where does the type parameter go when declaring a generic **method**?'
+    options:
+      - 'After the method name: `firstOrNull<T>(List<T> l)`'
+      - text: 'Immediately before the return type: `static <T> T firstOrNull(List<T> l)`'
+        correct: true
+      - 'On the class — methods cannot declare their own type parameters'
+    explain: 'The `<T>` before the return type introduces a method-scoped type parameter, independent of any class parameter. Callers rarely name it — inference fills it in, with `Demo.<String>firstOrNull(list)` as the explicit fallback.'
+  - q: 'You assign a `List<String>` to a raw `List` variable and pass it to legacy code. What protection remains on additions through the raw reference?'
+    options:
+      - 'The JVM still validates element types at insertion'
+      - text: 'None — any object can be added; the failure resurfaces later as a `ClassCastException` at a read site'
+        correct: true
+      - 'The compiler blocks all writes through a raw type'
+    explain: 'Raw types disable generic checking entirely (you only get an "unchecked" warning). The corrupt element sits quietly in the list until some innocent `String s = list.get(i)` — far from the real bug — blows up.'
+```
+
 :::key
 Generics deliver compile-time type safety and cast-free code by parameterizing types with `<T>`. Use the diamond `<>` to avoid repetition, follow the `T`/`E`/`K`/`V` naming conventions, write generic methods when only a method needs a type parameter, and never fall back to raw types.
 :::

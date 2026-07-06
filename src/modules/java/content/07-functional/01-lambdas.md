@@ -47,6 +47,18 @@ boolean ok = notEmpty.isValid("hello");   // true
 
 Default and static methods do **not** count toward the single-method limit, and neither do `public` methods inherited from `Object` (like `equals` or `toString`). The optional `@FunctionalInterface` annotation makes the compiler reject the interface if it ever stops having exactly one abstract method — a cheap safety net.
 
+A lambda has no type by itself — it acquires one from its target, and only a functional interface qualifies:
+
+```mermaid
+flowchart TD
+    A["Lambda: (a, b) -> a + b"] --> B{"Is there a target type from context?"}
+    B -->|"no context"| C["Compile error — a lambda has no standalone type"]
+    B -->|"assignment / argument / return"| D{"Target is a functional interface?"}
+    D -->|no| E["Compile error — needs exactly one abstract method"]
+    D -->|yes| F["Lambda becomes that method's implementation"]
+    F --> G["Parameter and return types inferred from the abstract method"]
+```
+
 ## The built-in function types
 
 You rarely declare your own — `java.util.function` ships the common shapes. Master these six:
@@ -111,6 +123,34 @@ Inside an anonymous class, `this` refers to the anonymous object, so `this.field
 :::senior
 Lambdas don't allocate a new class per use the way anonymous classes do. The first time a lambda runs, `LambdaMetafactory` spins up its implementation; a **non-capturing** lambda is typically cached as a singleton, while a capturing one allocates per capture. This makes lambdas cheaper than anonymous classes, but it's still worth avoiding capture in tight loops.
 :::
+
+## Check yourself
+
+```quiz
+title: Lambdas & functional interfaces
+questions:
+  - q: 'A lambda captures a local variable. What must be true of that variable?'
+    options:
+      - text: 'It must be **effectively final** — assigned once and never reassigned'
+        correct: true
+      - 'It must be declared `static`'
+      - 'It must be a field rather than a local'
+    explain: 'Locals live on the stack and may outlive the method call via the lambda, so Java captures their *value* and forbids reassignment to keep the copy consistent. Instance/static fields are reached through the captured `this`/class and can change freely.'
+  - q: 'Inside a lambda, what does `this` refer to?'
+    options:
+      - text: 'The **enclosing** instance'
+        correct: true
+      - 'The lambda object itself'
+      - 'Always `null`'
+    explain: 'A lambda shares the enclosing scope, so `this` is the enclosing instance. In an *anonymous class*, by contrast, `this` is the anonymous object itself — a classic trap when migrating old code to lambdas.'
+  - q: 'Which of these still qualifies as a functional interface?'
+    options:
+      - text: 'An interface with one abstract method plus several `default` and `static` methods'
+        correct: true
+      - 'An interface with two abstract methods'
+      - 'An interface with zero abstract methods'
+    explain: 'A functional interface has exactly **one** abstract method (SAM). `default`, `static`, and methods inherited from `Object` (like `equals`) do not count. `@FunctionalInterface` makes the compiler enforce the rule.'
+```
 
 :::key
 A lambda is an inline implementation of a functional interface's one abstract method. It captures *effectively final* locals, uses the enclosing `this`, and gets its type from context. Reach for the built-ins (`Function`, `Consumer`, `Supplier`, `Predicate`, `BiFunction`, `UnaryOperator`) before writing your own.

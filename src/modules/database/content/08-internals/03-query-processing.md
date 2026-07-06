@@ -16,12 +16,12 @@ which picks a plan by estimating cost from statistics, without ever running the 
 
 ```mermaid
 flowchart LR
-  SQL["SQL text"] --> P["Parser<br/>syntax → parse tree"]
-  P --> A["Analyzer / Binder<br/>resolve names & types → query tree"]
-  A --> R["Rewriter<br/>expand views & rules"]
-  R --> O["Planner / Optimizer<br/>cost-based → plan tree"]
-  O --> E["Executor<br/>run plan → rows"]
-  O -. reads .-> S[("Statistics<br/>pg_statistic")]
+  SQL["SQL text"] -->|syntax check| P["Parser: parse tree"]
+  P -->|"resolve names and types"| A["Analyzer: query tree"]
+  A -->|"expand views and rules"| R["Rewriter"]
+  R -->|"cost-based search"| O["Optimizer: plan tree"]
+  O -->|"pull rows"| E["Executor"]
+  O -. reads .-> S[("Statistics (pg_statistic)")]
 ```
 
 | Stage | Input → output | Job |
@@ -101,8 +101,8 @@ its children on demand — no operator materializes everything unless it must.
 
 ```mermaid
 flowchart TB
-  NL["Nested Loop (join)"] --> IS["Index Scan<br/>orders (customer_id)"]
-  NL --> SS["Seq Scan<br/>customers"]
+  NL["Nested Loop (join)"] --> IS["Index Scan on orders (customer_id)"]
+  NL --> SS["Seq Scan on customers"]
 ```
 
 ## Reading a real plan

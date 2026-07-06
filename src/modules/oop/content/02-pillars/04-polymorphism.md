@@ -17,9 +17,12 @@ Every subclass supplies its own version of `speak()`, but callers just say `anim
 
 ```mermaid
 classDiagram
+    class Client {
+      +describe(Animal a) void
+    }
     class Animal {
-      +String name
-      +speak() String
+      <<abstract>>
+      +speak()* String
     }
     class Dog {
       +speak() String
@@ -27,8 +30,10 @@ classDiagram
     class Cat {
       +speak() String
     }
+    Client --> Animal : depends only on
     Animal <|-- Dog
     Animal <|-- Cat
+    note for Client "a.speak() compiles against Animal, dispatches to Dog or Cat at runtime"
 ```
 
 ## Two kinds of polymorphism
@@ -39,6 +44,12 @@ classDiagram
 | Lives in | the **same** class | a **subclass** |
 | Signature | **different** parameters | **identical** |
 | Resolved | at **compile time** (declared types) | at **runtime** (object's real type) |
+
+:::note
+Purists — and some interviewers — reserve "polymorphism" for **subtype** polymorphism
+(overriding). Overloading is *ad-hoc* polymorphism, and generics are *parametric* polymorphism.
+If asked "is overloading really polymorphism?", naming that taxonomy **is** the expected answer.
+:::
 
 ## Overriding vs overloading
 
@@ -87,6 +98,60 @@ Only **instance methods** are polymorphic. `static` methods are bound at compile
 :::senior
 Under the hood each class has a **vtable** (virtual method table); an object header points to its class's vtable, so a virtual call is just an indexed jump. That's why dispatch is cheap — and why a `final` (non-virtual) method can be inlined by the JIT.
 :::
+
+## The rules of a legal override
+
+The compiler enforces substitutability on every override:
+
+- **Same signature** (name + parameter types). The return type may be **covariant** — an override
+  may return a *subtype* (`Dog clone()` overriding `Animal clone()`, allowed since Java 5).
+- Visibility may **widen** (`protected` → `public`) but never narrow — code holding the parent
+  type must not lose access at runtime.
+- Checked exceptions may be **removed or narrowed**, never broadened — callers compiled against
+  the parent's `throws` clause must stay correct.
+
+Always write `@Override`: it turns a silent overload-by-typo — `equals(MyType o)` instead of
+`equals(Object o)` — into a compile error. That specific typo creates an overload that hash-based
+collections never call, and it is a beloved interview trap.
+
+## Where the JDK bets everything on it
+
+`Collections.sort(list)` was written years before your class existed, yet it sorts your `Invoice`
+objects — by dispatching to *your* `compareTo`. The same inversion powers `toString()` in every
+logger, `equals()`/`hashCode()` inside every `HashMap`, and Spring AOP, which subclasses or
+proxies your bean and overrides its methods to wrap them in transactions. Polymorphism is the
+mechanism that lets **old code call new code** — every framework callback relies on it.
+
+## The overloading trap interviewers love
+
+Overload resolution runs at compile time on declared types, and Java prefers an exact primitive
+match over autoboxing:
+
+```java
+List<Integer> list = new ArrayList<>(List.of(10, 20, 30));
+list.remove(1);                    // remove(int index)  → removes 20, the element AT index 1
+list.remove(Integer.valueOf(20));  // remove(Object)     → removes the VALUE 20
+```
+
+`remove(1)` binds to `remove(int)` — index, not value — because no boxing is needed. Knowing
+*why* (resolution order: exact match → widening → boxing → varargs) is what separates a memorised
+answer from an understood one.
+
+## In code review: the instanceof ladder
+
+The anti-polymorphism smell is a type switch:
+
+```java
+if (shape instanceof Circle c)      area = Math.PI * c.radius() * c.radius();
+else if (shape instanceof Square s) area = s.side() * s.side();   // new shape = edit every ladder
+```
+
+Every new `Shape` forces an edit to every such ladder — and a missed one compiles fine and fails
+at runtime. The polymorphic fix moves behaviour into the types: `shape.area()`. That refactor,
+**replace conditional with polymorphism**, is among the most common OOP code-review comments. The
+modern exception: a `sealed` hierarchy with a pattern-matching `switch` is a legitimate
+alternative when the set of *operations* grows faster than the set of *types* — the compiler then
+checks exhaustiveness for you.
 
 ## Check yourself
 

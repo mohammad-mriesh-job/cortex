@@ -103,13 +103,12 @@ Every cache entry is a bet that the source of truth has not changed. Three ways 
 ```mermaid
 flowchart TD
     I["How does a stale entry get cleared?"]
-    I --> T["TTL (expiry)<br/>entry auto-dies after N seconds"]
-    I --> E["Explicit invalidation<br/>delete/update key on write"]
-    I --> W["Write-through / versioning<br/>cache updated as part of the write"]
-    T --> Tn["Simple, self-healing;<br/>but serves stale up to TTL"]
-    E --> En["Fresh fast; but easy to MISS<br/>an update path → permanent stale"]
-    W --> Wn["Always fresh; but couples<br/>writes to the cache"]
-    style I fill:#f8981d,color:#000
+    I --> T["TTL expiry — entry auto-dies after N seconds"]
+    I --> E["Explicit invalidation — delete the key on write"]
+    I --> W["Write-through or versioning — cache updated as part of the write"]
+    T --> Tn["Simple, self-healing — but serves stale up to the TTL"]
+    E --> En["Fresh fast — but miss one write path and the key is stale forever"]
+    W --> Wn["Always fresh — but couples every write to the cache"]
 ```
 
 - **TTL** — cheap and self-healing: even if you forget to invalidate, staleness is bounded by the TTL. Short TTL = fresher but more misses; long TTL = fewer misses but staler. The default lever.
@@ -150,6 +149,23 @@ Decide your **failure mode** deliberately. When the cache (Redis) is unreachable
 SET  user:42  "{...}"  EX 300     -- value with a 300s TTL
 INCR ratelimit:ip:1.2.3.4          -- atomic counter (rate limiting)
 TTL  user:42                       -- seconds left before expiry
+```
+
+```flashcards
+title: Caching-strategy recall
+cards:
+  - front: '**Cache-aside** in one line?'
+    back: 'App checks cache → on miss loads from DB and populates → on write, **DB then delete key**. The default pattern.'
+  - front: 'Which strategy can lose committed-to-cache data on a crash?'
+    back: '**Write-back (write-behind)** — it acks after writing the cache only; the async DB flush may never happen.'
+  - front: 'Write-through''s trade?'
+    back: 'Cache is **never stale** (sync write to DB through the cache), but every write pays double latency and cold keys get cached.'
+  - front: 'Why delete instead of update the cache on write?'
+    back: 'In-place updates **race** concurrent writes and can cache the losing value; delete forces the next read to reload from the source of truth.'
+  - front: 'Three stampede defenses?'
+    back: '**Single-flight** (one recompute, rest wait), **stale-while-revalidate**, **jittered TTLs** so hot keys don''t expire together.'
+  - front: 'The dual-write race, and the robust fix?'
+    back: '"Write DB then delete key" isn''t atomic — a failed delete or interleaved repopulate leaves permanent staleness. Fix: invalidate from **CDC/binlog**, with a TTL backstop.'
 ```
 
 ## Check yourself

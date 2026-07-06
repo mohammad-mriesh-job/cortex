@@ -21,9 +21,9 @@ flowchart TD
   ROOT --> R[Race conditions]
   ROOT --> D[Deadlock and liveness]
   ROOT --> V[Memory visibility]
-  R --> R1[Lost updates, check-then-act, non-atomic steps]
-  D --> D1[Deadlock, livelock, starvation]
-  V --> V1[Stale reads, reordering, no happens-before]
+  R --> R1["Lost updates, check-then-act, non-atomic steps"]
+  D --> D1["Deadlock, livelock, starvation"]
+  V --> V1["Stale reads, reordering, no happens-before"]
 ```
 
 One root cause branches into three failure modes. Keep the root in mind — every fix in this track is
@@ -66,8 +66,21 @@ tabs:
 ### 1. Race conditions — the *interleaving* hazard
 
 Timing decides the answer. Because a step like `count++` is secretly **read-modify-write**, two threads
-can both read the same value and both write it back, losing an update. Change the interleaving and you
-change the result. This is the star of the very next module, **The Shared-State Problem**.
+can both read the same value and both write it back, losing an update. Here is the exact interleaving
+that loses one — both threads increment, yet the counter moves by one:
+
+| Step | Thread A | Thread B | `count` in memory |
+|--|--|--|--|
+| 1 | read `count` → 5 | — | 5 |
+| 2 | — | read `count` → 5 | 5 |
+| 3 | add 1 → 6 (in register) | — | 5 |
+| 4 | — | add 1 → 6 (in register) | 5 |
+| 5 | write 6 | — | 6 |
+| 6 | — | write 6 | **6 — A's increment lost** |
+
+Change the interleaving (A finishes all three steps before B starts) and you get the correct 7 —
+correctness that depends on scheduling luck. This is the star of the very next module, **The
+Shared-State Problem**.
 
 ### 2. Deadlock and liveness — the *progress* hazard
 

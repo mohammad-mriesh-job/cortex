@@ -63,6 +63,33 @@ tabs:
       Never build correctness on priority ordering.
 ````
 
+## Daemons you already depend on
+
+You run daemons whether you create them or not: the JVM's **GC threads**, **JIT compiler threads**,
+and the reference handler are all daemons. The one that bites in application code is
+**`ForkJoinPool.commonPool()`** — its workers are daemon threads, and it is the default executor for
+**parallel streams** and **`CompletableFuture.supplyAsync/runAsync`**. That combination produces a
+classic lost-work bug:
+
+```java
+public static void main(String[] args) {
+    CompletableFuture.runAsync(() -> writeAuditRecord());  // runs on commonPool = daemons
+    // main returns -> last user thread gone -> JVM exits -> the write may never happen
+}
+```
+
+Nothing fails, nothing logs — the record silently never lands. The fixes: **block on the result**
+(`future.join()`), run must-finish work on **your own executor** of user threads, or await
+termination before returning from `main`.
+
+Two more modern facts worth knowing cold:
+
+- **Virtual threads (Java 21) are always daemons.** `Thread.ofVirtual()` threads never keep the JVM
+  alive, and calling `setDaemon(false)` on one throws `IllegalArgumentException`. A server whose only
+  live threads are virtual will simply exit — frameworks keep a platform user thread alive for you.
+- **Virtual thread priority is fixed** at `NORM_PRIORITY`; `setPriority()` on one is a no-op. Another
+  reason priority can never be a correctness tool in modern code.
+
 :::gotcha
 Daemon threads are **killed abruptly** when the JVM exits — their `finally` blocks and cleanup code
 may **not run**, buffers may not flush, and files may be left half-written. Never use a daemon for
@@ -76,7 +103,10 @@ every platform — Windows, Linux, and macOS collapse Java's 1–10 range in dif
 schedulers ignore them outright. Relying on priority for correctness invites **starvation** (a
 low-priority thread never runs) and **priority inversion** (a high-priority thread waits on a lock
 held by a low-priority one). Treat priorities as a faint hint at best; encode real ordering with
-explicit coordination (queues, latches, `join()`), not scheduler nudges.
+explicit coordination (queues, latches, `join()`), not scheduler nudges. The canonical war story is
+the 1997 **Mars Pathfinder** lander: a low-priority task held a mutex a high-priority task needed
+while medium-priority work starved it, resetting the spacecraft repeatedly — fixed from Earth by
+enabling **priority inheritance** on the mutex.
 :::
 
 ## Check yourself

@@ -87,6 +87,34 @@ Under the hood, JPA/Hibernate is an **ORM** mapping objects to rows.
 ORMs hide SQL, which is exactly the danger. The infamous **N+1 problem**: loading 100 orders then lazily fetching each one's customer fires 101 queries. And `@Transactional` works only through Spring's **proxy**, so a method calling another `@Transactional` method *on the same object* (`this.foo()`) silently skips the new transaction. For complex, performance-critical queries, drop to `JdbcTemplate` or jOOQ rather than torturing JPA.
 :::
 
+## Check yourself
+
+```quiz
+title: The Spring ecosystem
+questions:
+  - q: 'Why prefer constructor injection over field injection (`@Autowired` on a field)?'
+    options:
+      - text: 'It allows `final` fields, makes dependencies explicit, fails fast if one is missing, and unit-tests without Spring'
+        correct: true
+      - 'It is the only kind Spring supports'
+      - 'It makes the bean prototype-scoped'
+    explain: 'A constructor states exactly what the class needs and lets you pass mocks directly in a test — no container or reflection. Field injection hides dependencies and quietly enables god-classes with a dozen collaborators.'
+  - q: 'By default, what scope does a Spring bean have?'
+    options:
+      - text: 'Singleton — one shared instance per application context'
+        correct: true
+      - 'Prototype — a new instance per injection'
+      - 'Request — one per HTTP request'
+    explain: 'Beans are singletons by default (one per context). Other scopes (`prototype`, `request`, `session`) exist but you opt into them. The `ApplicationContext` creates, wires, and manages these beans.'
+  - q: 'What is Spring Boot''s core value over plain Spring?'
+    options:
+      - text: 'Convention over configuration — auto-configuration, starter dependencies, and an embedded server'
+        correct: true
+      - 'It replaces the JVM with a faster runtime'
+      - 'It removes the need for a database'
+    explain: 'Boot inspects the classpath and wires sensible defaults (auto-configuration), bundles curated dependencies (starters), and packages an embedded server so the app is a runnable jar — you override defaults only where your needs diverge.'
+```
+
 :::key
 Spring turns application **plumbing into configuration**. **IoC/DI** (favor constructor injection) decouples and tests your code; the **`ApplicationContext`** manages **beans** (singletons by default); **Spring Boot** adds auto-configuration, starters, and an embedded server under *convention over configuration*. Choose **MVC** for most services and **WebFlux** for extreme concurrency, and use **Spring Data/JPA** for CRUD while staying alert to N+1 and proxy-based `@Transactional` gotchas.
 :::

@@ -84,6 +84,37 @@ The runtime data areas are **not** all one pool. **Metaspace, thread stacks, and
 Treating "the JVM" as a black box hides real engineering levers. The spec deliberately leaves placement undefined — e.g. **escape analysis** can put a short-lived object's fields in registers instead of the heap, and **compressed ordinary object pointers (compressed oops)** shrink references to 32 bits below a ~32 GB heap. Picking an *implementation* (OpenJ9 for fast container startup, GraalVM Native Image for serverless, Zing for pauseless latency) is an architectural decision, not a detail.
 :::
 
+## Check yourself
+
+```quiz
+title: 'JVM architecture'
+questions:
+  - q: 'Which memory areas are **shared** across all threads?'
+    options:
+      - 'Heap, stacks, and PC registers.'
+      - text: 'The **heap** and **Metaspace** — stacks, PC registers, and native stacks are per-thread.'
+        correct: true
+      - 'Only the heap.'
+      - 'Everything — the JVM has one flat memory pool.'
+    explain: 'Objects (heap) and class metadata (Metaspace) are visible to every thread — which is why they need GC and synchronization. Each thread privately owns its call stack, PC register, and native stack.'
+  - q: 'Your service throws `OutOfMemoryError: Metaspace` even though the 8 GB heap is half-empty. Why does raising `-Xmx` not help?'
+    options:
+      - 'Metaspace is 25% of the heap, so you must raise it more.'
+      - text: 'Metaspace lives in **native memory**, outside the Java heap — `-Xmx` does not bound it. The usual culprit is a classloader leak; cap and monitor it with `-XX:MaxMetaspaceSize`.'
+        correct: true
+      - 'The error is mislabelled heap exhaustion.'
+      - 'Metaspace only grows at JVM startup.'
+    explain: 'Metaspace, thread stacks, and the JIT code cache are native allocations. A framework that keeps generating classes (proxies, redeploys without discarding old classloaders) exhausts Metaspace regardless of heap headroom.'
+  - q: 'What does HotSpot''s "mixed mode" mean?'
+    options:
+      - 'It mixes Java bytecode with Kotlin bytecode.'
+      - text: 'The interpreter and JIT run **simultaneously**: methods start interpreted, get profiled, and only proven-hot methods are compiled to native code.'
+        correct: true
+      - 'Half the heap is compiled, half interpreted.'
+      - 'It alternates between C1 and C2 on every call.'
+    explain: 'Interpreting starts instantly; compiling everything up-front would be slow and wasteful since most methods run rarely. Profiling finds the hot 1-5% worth optimising. `-Xint` and `-Xcomp` disable the mix for diagnostics only.'
+```
+
 :::key
 - The JVM has **three subsystems**: class loader (finds/prepares types), runtime data areas (holds state), execution engine (runs code).
 - The execution engine = **interpreter + JIT (C1/C2) + garbage collector**, with **JNI** bridging to native code; HotSpot runs interpreter and JIT together in *mixed mode*.

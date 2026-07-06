@@ -25,12 +25,26 @@ Each class has one **virtual method table** (vtable): an array of pointers to th
 
 ```mermaid
 flowchart LR
-  obj["Dog object<br/>(header)"] --> vt["Dog vtable"]
+  obj["Dog object header"] --> vt["Dog vtable"]
   vt -->|"slot 0: speak()"| ds["Dog.speak()"]
-  vt -->|"slot 1: eat()"| ae["Animal.eat() (inherited)"]
+  vt -->|"slot 1: eat()"| ae["Animal.eat() — inherited"]
 ```
 
 *Overridden slots point to the subclass body; non-overridden slots reuse the inherited body — so `a.speak()` always finds the right override regardless of the reference type.*
+
+### The four invoke instructions
+
+`javac` compiles every call into one of four bytecodes, and each names its dispatch rule:
+
+| Bytecode | Used for | Binding |
+|--|--|--|
+| `invokevirtual` | ordinary instance methods | dynamic — vtable |
+| `invokeinterface` | calls through an interface type | dynamic — itable search |
+| `invokestatic` | `static` methods | static |
+| `invokespecial` | constructors, `private` methods, `super.m()` | static |
+
+Run `javap -c` on any class to see them — a thirty-second demo that answers *"how does the JVM
+actually know which method to call?"* with evidence instead of hand-waving.
 
 ## The diamond problem
 

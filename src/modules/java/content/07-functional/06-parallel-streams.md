@@ -90,6 +90,34 @@ List<Integer> safe = nums.parallelStream().collect(Collectors.toList());
 Never run **blocking I/O** (HTTP, JDBC) on a parallel stream: it borrows the **common pool**, which is shared by the whole JVM (and by `CompletableFuture`). A few blocked tasks starve everything else. If you must, isolate the work by submitting the pipeline to a dedicated `ForkJoinPool`: `myPool.submit(() -> stream.parallel()...).get();`. Better still, use a proper async/executor framework for I/O, and reserve parallel streams for CPU-bound, in-memory number crunching. And always **measure** — naive `parallel()` frequently runs *slower* than sequential.
 :::
 
+## Check yourself
+
+```quiz
+title: Parallel streams
+questions:
+  - q: 'Why can `reduce(0, (a, b) -> a - b)` give different results in parallel vs sequential?'
+    options:
+      - text: 'Subtraction is not **associative**, and parallel reduction regroups the operations'
+        correct: true
+      - 'Because `0` is the wrong identity for subtraction'
+      - 'Because parallel streams drop elements'
+    explain: 'Parallel `reduce` splits the data and combines partial results in an unspecified grouping, which is only consistent when the accumulator is associative. Subtraction isn''t, so the answer depends on how the source was split.'
+  - q: 'Why is running blocking I/O (JDBC, HTTP) inside a parallel stream dangerous?'
+    options:
+      - text: 'It borrows the JVM-wide common ForkJoinPool; a few blocked tasks starve everything else'
+        correct: true
+      - 'Parallel streams cannot perform I/O at all'
+      - 'It silently forces the stream back to sequential'
+    explain: 'Parallel streams share `ForkJoinPool.commonPool()` across the whole JVM (and `CompletableFuture`). Blocking those few workers stalls unrelated parallel work. Use a dedicated pool, or better, a proper async/executor framework for I/O.'
+  - q: 'When is `parallel()` most likely to actually pay off?'
+    options:
+      - text: 'Large N with expensive per-element work over a cheaply splittable source (array, `ArrayList`, range)'
+        correct: true
+      - 'A small collection with trivial work per element'
+      - 'A `LinkedList` source'
+    explain: 'Parallelism has splitting and merging overhead, so it wins only when N×Q is large and the source splits evenly. `LinkedList`, `Stream.iterate`, and `BufferedReader.lines` split poorly and usually run slower in parallel.'
+```
+
 :::key
 `parallel()` farms work out to the shared **common ForkJoinPool** via splitting and joining. It helps only when **N × Q is large** and the source splits cheaply (arrays, `ArrayList`, ranges). Keep lambdas **stateless, non-interfering, and associative**, use `collect`/`forEachOrdered` instead of mutating shared state, never block on the common pool, and **benchmark** before trusting the speedup.
 :::

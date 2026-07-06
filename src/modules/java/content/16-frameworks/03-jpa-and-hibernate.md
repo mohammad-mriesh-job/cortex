@@ -99,6 +99,19 @@ tabs:
 
 Within a transaction, the persistence context is a **first-level cache** and an identity map: load the same row twice and you get the *same* object. It also does **dirty checking** — change a managed entity's field and Hibernate auto-generates the `UPDATE` on flush; you never call `save()` for an already-managed entity.
 
+An entity moves through four lifecycle states relative to that context — only a **managed** entity is dirty-checked:
+
+```mermaid
+stateDiagram-v2
+    [*] --> Transient: new
+    Transient --> Managed: persist
+    Managed --> Detached: session closes
+    Detached --> Managed: merge
+    Managed --> Removed: remove
+    Removed --> [*]: commit
+    Managed --> Managed: dirty check UPDATE
+```
+
 ## Spring Data repositories
 
 ```java

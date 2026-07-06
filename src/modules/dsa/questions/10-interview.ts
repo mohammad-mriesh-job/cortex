@@ -305,6 +305,177 @@ return false;
 The same technique finds the **middle** of a list (slow is at the midpoint when fast reaches the end) and the **cycle's start** (reset one pointer to head, then advance both by 1).
 :::`,
   },
+  {
+    id: 'dsa-iq-clarifying-questions',
+    question: 'What should you clarify before writing any code in a coding interview?',
+    difficulty: 'Easy',
+    category: 'Interview Prep',
+    tags: ['process', 'clarify', 'requirements'],
+    answer: `Spend the first minutes nailing the **contract**, not coding. Ask about:
+
+- **Input domain** — size of \`n\`, value ranges, negatives, **duplicates**, is it **sorted**?
+- **Edge inputs** — can it be **empty** or **null**? single element?
+- **Output** — return the value, an index, all solutions, or a count? What if none exists?
+- **Constraints** — in-place required? memory limits? can I modify the input?
+- **Ties / ordering** — any specific order expected in the result?
+
+:::tip
+Clarifying questions do double duty: they prevent solving the wrong problem, and they signal seniority. The constraints you surface (especially \`n\` and "sorted?") often reveal the intended complexity and approach before you write a line.
+:::`,
+  },
+  {
+    id: 'dsa-iq-think-aloud',
+    question: 'Why is thinking aloud important, and how do you do it well?',
+    difficulty: 'Easy',
+    category: 'Interview Prep',
+    tags: ['communication', 'process', 'signal'],
+    answer: `The interviewer is grading your **problem-solving process**, not just the final code — and they can only grade what they hear. Silence looks like being stuck; narration shows structured thinking.
+
+Do it well by narrating **decisions**, not keystrokes:
+
+- ✅ "A hash set gives O(1) membership, trading O(n) space to drop the nested loop."
+- ✅ "I'll handle the empty-array case first, then the general case."
+- ❌ Reading code verbatim, or going silent for two minutes.
+
+:::senior
+Narrating also lets the interviewer **redirect you early** if you head down a wrong path — saving time you'd otherwise lose. A candidate who communicates a decent approach clearly often outscores one who silently produces slightly better code.
+:::`,
+  },
+  {
+    id: 'dsa-iq-taking-hints',
+    question: 'How should you respond when the interviewer offers a hint?',
+    difficulty: 'Easy',
+    category: 'Interview Prep',
+    tags: ['process', 'hints', 'collaboration'],
+    answer: `**Take it seriously and engage** — a hint is a course correction, not a trap. Interviewers *expect* to nudge; how you incorporate feedback is itself part of the signal.
+
+- **Acknowledge and think it through** out loud: "Good point — if I sort first, the two-pointer sweep becomes valid."
+- **Don't ignore it** and plow ahead on your original path — that reads as uncoachable.
+- **Don't over-pivot** either: understand *why* the hint helps before rewriting everything.
+
+:::senior
+A hint usually means "you're close but missing one idea." Treat interviews as **collaborative** — the ability to integrate feedback quickly is exactly what day-to-day engineering (code review, pairing) requires, and interviewers weight it heavily.
+:::`,
+  },
+  {
+    id: 'dsa-iq-recognize-two-pointer',
+    question: 'What signals that a problem is solved with two pointers?',
+    difficulty: 'Easy',
+    category: 'Interview Prep',
+    tags: ['patterns', 'two-pointers', 'cues'],
+    answer: `Reach for **two pointers** when you see:
+
+- A **sorted array** and a **pair/triplet** with a target sum → opposite-end pointers (two-sum sorted, 3sum, container with most water).
+- **In-place** array manipulation preserving order → slow/fast **read-write** pointers (move zeroes, remove duplicates, partition).
+- A **palindrome** or symmetric check → pointers converging from both ends.
+- A **linked list** cycle / middle / nth-from-end → **fast-slow** pointers.
+
+\`\`\`java
+int l = 0, r = n - 1;
+while (l < r) { /* move l up or r down based on a condition */ }
+\`\`\`
+
+:::tip
+The unifying idea is replacing a **nested O(n²) loop** with a **single O(n) coordinated sweep**. If the brute force is "try all pairs," ask whether sorting plus two pointers collapses it to linear.
+:::`,
+  },
+  {
+    id: 'dsa-iq-recognize-prefix-sum',
+    question: 'What signals a prefix-sum (or running-aggregate) solution?',
+    difficulty: 'Medium',
+    category: 'Interview Prep',
+    tags: ['patterns', 'prefix-sum', 'cues'],
+    answer: `Think **prefix sums** when a problem involves **range aggregates** or **contiguous subarray sums**, especially with **repeated queries** or **negative numbers** (where a sliding window fails).
+
+- "Sum/average of range \`[i, j]\`" over many queries → precompute prefixes, each query **O(1)**.
+- "Count/find subarrays summing to \`k\`" with negatives → prefix sums **+ a hash map** of seen prefixes.
+- 2-D versions ("submatrix sum") → a 2-D prefix-sum table.
+
+\`\`\`java
+// subarray sum == k, handles negatives
+map.put(0, 1);
+for (int x : a) { run += x; count += map.getOrDefault(run - k, 0);
+                  map.merge(run, 1, Integer::sum); }
+\`\`\`
+
+:::senior
+The deciding factor vs a sliding window: if the array has **negatives**, the window's sum isn't monotonic as it grows, so windows break — prefix sums with a hash map are the correct tool.
+:::`,
+  },
+  {
+    id: 'dsa-iq-test-your-code',
+    question: 'After writing a solution, how do you verify it before saying "done"?',
+    difficulty: 'Medium',
+    category: 'Interview Prep',
+    tags: ['process', 'testing', 'review'],
+    answer: `**Dry-run** your code on a concrete example, tracing variables line by line — don't just re-read it, *execute it in your head*.
+
+1. **Trace a normal case** with small values, tracking each variable's state.
+2. **Hit the edge cases** you raised earlier: empty, single element, all-equal, target absent, overflow.
+3. **Check boundaries** — first/last index, loop start/end, off-by-one in \`<\` vs \`<=\`.
+4. **State complexity** — confirm the time/space you claimed actually holds.
+
+:::gotcha
+Proactively finding and fixing your own bug during the dry-run scores **higher** than the interviewer catching it. Narrate the trace: "at \`i = 2\`, \`sum\` is 5, which exceeds \`k\`, so I shrink from the left…" — this catches most off-by-one and initialization bugs.
+:::`,
+  },
+  {
+    id: 'dsa-iq-when-stuck',
+    question: 'What is your strategy when you get stuck on a problem?',
+    difficulty: 'Medium',
+    category: 'Interview Prep',
+    tags: ['process', 'strategy', 'unstuck'],
+    answer: `Have a concrete recovery ladder rather than freezing:
+
+1. **Solve a smaller / simpler version** — n=1, 2, then generalize the pattern.
+2. **Work a concrete example by hand** and watch what your brain does — that procedure often *is* the algorithm.
+3. **Re-read the constraints** — the size of \`n\` hints at the target complexity (n≤20 → exponential is fine; n≤10⁵ → need n log n).
+4. **Fall back to brute force**, get it working, then optimize the named bottleneck. Partial credit beats a blank screen.
+5. **Ask a targeted question** — "would sorting the input be acceptable here?"
+
+:::senior
+Never go silent. Verbalizing where you're stuck ("I need O(1) lookup of the complement but I'm scanning") frequently surfaces the answer yourself, and lets the interviewer offer a hint. A working brute force plus a clear optimization plan is a strong outcome.
+:::`,
+  },
+  {
+    id: 'dsa-iq-optimize-bottleneck',
+    question: 'You have a brute-force solution. How do you systematically optimize it?',
+    difficulty: 'Medium',
+    category: 'Interview Prep',
+    tags: ['process', 'optimization', 'strategy'],
+    answer: `**Name the bottleneck, then match it to the technique that removes it.**
+
+| Brute-force cost | Bottleneck | Optimization |
+|--|--|--|
+| Nested pair search | repeated lookups | **hash map** → O(n) |
+| Repeated range sums | recomputation | **prefix sums** |
+| Repeated min/max in window | rescanning | **monotonic deque / heap** |
+| Recomputed subproblems | overlap | **memoization / DP** |
+| Search in sorted data | linear scan | **binary search** |
+| "Try all pairs" on sorted | O(n²) | **two pointers** |
+
+:::senior
+The mental move is: "which operation dominates, and what data structure makes that operation cheaper?" Most O(n²)→O(n) wins come from **spending O(n) memory** (a hash map or precomputed array) to eliminate a repeated inner computation. State the trade-off explicitly.
+:::`,
+  },
+  {
+    id: 'dsa-iq-doesnt-fit-memory',
+    question: 'The interviewer says the data does not fit in memory. How do you approach it?',
+    difficulty: 'Medium',
+    category: 'Interview Prep',
+    tags: ['scale', 'external', 'streaming'],
+    answer: `This cue shifts you from in-memory algorithms to **external / streaming** techniques:
+
+- **Sorting** huge data → **external merge sort**: sort memory-sized chunks into runs on disk, then k-way **heap-merge** them.
+- **Top-k / frequency** over a stream → a **size-k heap** or **count-min sketch** (approximate counts in fixed memory).
+- **Membership / dedup** at scale → a **Bloom filter** (probabilistic, tiny memory) or **external hashing / partitioning** by key.
+- **Aggregations** → **chunk/stream** the input, maintaining only running accumulators (sum, count, min/max).
+- **Distributed** → partition by key so each machine handles a shard (**MapReduce** shape).
+
+:::senior
+The key reframing: you can no longer assume **random access** to all data. Process it in **one or few sequential passes**, keeping only bounded state. Naming external merge sort and a streaming/sketch structure signals systems maturity beyond LeetCode.
+:::`,
+  },
 ];
 
 export default questions;

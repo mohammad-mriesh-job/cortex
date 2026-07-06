@@ -17,9 +17,9 @@ assembles behavior from swappable parts.
 
 ```mermaid
 flowchart TD
-    Q{"Is B truly a<br/>kind-of A,<br/>substitutable for it?"}
-    Q -->|"Yes — is-a"| INH["Inheritance<br/>class B extends A"]
-    Q -->|"No — just reuses behavior"| COMP["Composition<br/>class B has-a A"]
+    Q{"Is B truly a kind-of A, substitutable for it?"}
+    Q -->|"Yes — is-a"| INH["Inheritance: class B extends A"]
+    Q -->|"No — just reuses behavior"| COMP["Composition: class B has-a A"]
 ```
 
 :::tip
@@ -44,7 +44,7 @@ classDiagram
       +addAll(Collection) boolean
     }
     HashSet <|-- CountingSet : extends (fragile)
-    note for CountingSet "HashSet.addAll() calls add() internally,<br/>so counts double — a hidden<br/>dependency on the parent''s code"
+    note for CountingSet "HashSet.addAll() calls add() internally, so counts double — a hidden dependency on the parent's code"
 ```
 
 ## Same feature, two designs
@@ -65,7 +65,7 @@ tabs:
         class CountingSet
         HashSet <|-- CountingSet
       ```
-      `CountingSet` is bound to internal calls it can''t see.
+      `CountingSet` is bound to internal calls it can't see.
       ```java
       class CountingSet<E> extends HashSet<E> {
           int count = 0;
@@ -91,7 +91,7 @@ tabs:
         Set <|.. CountingSet
         CountingSet o-- Set : wraps
       ```
-      `CountingSet` **wraps** a `Set` and forwards — it can''t see internals, so no double count.
+      `CountingSet` **wraps** a `Set` and forwards — it can't see internals, so no double count.
       ```java
       class CountingSet<E> implements Set<E> {
           private final Set<E> inner;   // has-a, not is-a
@@ -122,6 +122,30 @@ This is the engine behind the **Strategy** and **Decorator** patterns and depend
 injection: hold a collaborator behind an interface and swap it. Inheritance still wins when
 you genuinely need **polymorphic substitutability** (Liskov) — a `SavingsAccount` really *is*
 an `Account`.
+:::
+
+## The cost of composition — and when inheritance wins
+
+Composition is not free. `CountingSet` must forward every one of `Set`'s dozen-plus methods —
+boilerplate inheritance would have given you silently. Real codebases absorb it with forwarding
+base classes (Guava's `ForwardingSet`) or IDE-generated delegates. Wrappers also carry one
+genuine limitation, the **SELF problem**: if the wrapped object registers `this` somewhere (as a
+listener, in a callback), it hands out the *inner* object — and the wrapper's overrides are
+bypassed from then on.
+
+Inheritance remains the right call when:
+
+- the subtype is genuinely **substitutable** (LSP holds — `SavingsAccount` is an `Account`),
+- the base was **designed for extension** — Template Method skeletons like `HttpServlet.doGet`
+  or `AbstractList`, which documents exactly which methods to override,
+- you control both classes and document the self-use patterns (Effective Java's bar: *design and
+  document for inheritance, or else prohibit it* — mark the class `final`).
+
+:::gotcha
+"Favor composition" does not mean "never inherit". The standard follow-up is *"so when is
+inheritance right?"* — have the three-part answer ready: true is-a with substitutability, a base
+designed and documented for extension, or a framework extension point. Answering "never" is as
+wrong as subclassing `HashSet` to count insertions.
 :::
 
 ## Check yourself

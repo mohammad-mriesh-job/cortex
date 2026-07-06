@@ -28,6 +28,17 @@ There are exactly four forms, distinguished by **what is on the left of `::`** a
 | Unbound instance | `Type::instanceMethod` | `(obj, args) -> obj.instanceMethod(args)` | `String::toUpperCase` |
 | Constructor | `Type::new` | `(args) -> new Type(args)` | `ArrayList::new` |
 
+The kind is decided entirely by what sits to the **left** of `::`:
+
+```mermaid
+flowchart TD
+    A["something :: method   or   Type :: new"] --> B{"What is on the left of the colons?"}
+    B -->|"Type + new"| C["Constructor: () -> new Type()"]
+    B -->|"Type + static method"| D["Static: args -> Type.m(args)"]
+    B -->|"a specific instance value"| E["Bound: args -> instance.m(args)"]
+    B -->|"Type + instance method"| F["Unbound: first arg becomes the receiver"]
+```
+
 ### 1. Static method reference
 
 References a `static` method. Each lambda parameter becomes an argument to the method.
@@ -97,6 +108,34 @@ When a class has both a static method and an instance method of the same name, `
 :::senior
 Method references aren't always "cleaner." `Person::new` hides which constructor is chosen, and `this::handle` quietly captures `this` — extending the lifetime of the enclosing object, which can cause subtle leaks in listeners or callbacks. Prefer a reference when it reads as a noun ("the parse function"); prefer a lambda when the *transformation* is the point, e.g. `x -> x * 2`.
 :::
+
+## Check yourself
+
+```quiz
+title: Method references
+questions:
+  - q: '`String::length` is which kind of method reference?'
+    options:
+      - text: 'Unbound instance — the first parameter *becomes* the receiver: `s -> s.length()`'
+        correct: true
+      - 'Bound instance — the receiver is fixed'
+      - 'Static'
+    explain: 'Written `Type::instanceMethod`, it has no fixed receiver; the first argument is the object the method runs on. `str::length` for a specific instance would instead be the *bound* form, `() -> str.length()`.'
+  - q: 'Assigned to a `Supplier<List<String>>`, what does `ArrayList::new` desugar to?'
+    options:
+      - text: '`() -> new ArrayList<>()`'
+        correct: true
+      - '`n -> new ArrayList<>(n)`'
+      - '`list -> list.clone()`'
+    explain: 'A constructor reference selects the overload by the target interface''s arity. A `Supplier` takes no arguments, so it maps to the no-arg constructor; a `Function<Integer, List>` would map to `n -> new ArrayList<>(n)`.'
+  - q: 'When can `Type::method` fail to compile as a method reference?'
+    options:
+      - text: 'When the class has both a static and an instance method of that name — static vs unbound is ambiguous'
+        correct: true
+      - 'Whenever the method is `private`'
+      - 'Whenever the method returns `void`'
+    explain: 'If both a static `method(...)` and an instance `method(...)` fit, the compiler cannot choose between the static and unbound-instance interpretations. Disambiguate by writing an explicit lambda.'
+```
 
 :::key
 Four kinds: **static** (`Type::m`), **bound** (`obj::m`, receiver fixed), **unbound** (`Type::m`, first arg becomes the receiver), and **constructor** (`Type::new`). Every method reference desugars to a lambda — when in doubt, write out the lambda and check the parameter mapping.

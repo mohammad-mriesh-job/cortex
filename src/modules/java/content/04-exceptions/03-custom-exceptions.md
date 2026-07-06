@@ -85,7 +85,7 @@ Caused by: java.sql.SQLException: connection reset
 
 ```mermaid
 flowchart LR
-    A["SQLException<br/>(low-level cause)"] -->|wrapped as cause| B["UserRepositoryException<br/>(domain-level)"]
+    A["SQLException — low-level cause"] -->|wrapped as cause| B["UserRepositoryException — domain level"]
     B -->|getCause| A
 ```
 
@@ -112,6 +112,39 @@ class ServiceUnavailableException extends Exception { /* ... */ }
 :::senior
 Modern frameworks (Spring, JPA, most HTTP clients) lean heavily toward **unchecked** exceptions. Checked exceptions don't compose through lambdas and `Stream` pipelines — a `Function` can't throw a checked exception — so libraries built on functional APIs almost always use `RuntimeException` subclasses. Reserve checked exceptions for genuinely recoverable, expected outcomes at a module boundary.
 :::
+
+## Design checklist for the class itself
+
+- **Name it `SomethingException`** — the suffix is a hard convention, and the prefix should name the *failed condition* (`InsufficientFunds`), not the layer (`ServiceException` says nothing).
+- **Make it `final`** unless you're deliberately building a small hierarchy (`PaymentException` ← `CardDeclinedException`). Catching an open type invites subclasses you never planned for.
+- **Keep fields `final`** — an exception travels across threads and log pipelines; mutable state in one is asking for trouble.
+- **Don't put secrets in the message.** Messages end up in logs, monitoring systems, and sometimes HTTP responses. `"bad password for user bob"` is fine; embedding the password is an incident.
+
+```quiz
+title: Check yourself
+questions:
+  - q: 'What is the difference between `throw` and `throws`?'
+    options:
+      - 'They are interchangeable; `throws` is just older syntax'
+      - text: '`throw` raises an exception object in a method body; `throws` declares in the signature that a checked exception may escape'
+        correct: true
+      - '`throw` is for unchecked exceptions, `throws` for checked ones'
+    explain: 'One statement, one clause. Note the asymmetry: you *throw* any Throwable, but only **checked** exceptions ever need to appear in a `throws` clause.'
+  - q: 'In a `catch (SQLException e)` you write `throw new RepoException("query failed");`. What did you just lose?'
+    options:
+      - 'Nothing — the JVM links the two exceptions automatically'
+      - text: 'The root cause and its stack trace — no "Caused by" will appear'
+        correct: true
+      - 'Only performance — the message is preserved'
+    explain: 'Chaining is explicit in Java: unless you pass `e` as the cause (`new RepoException("query failed", e)`), the original SQLException is gone and debugging becomes guesswork.'
+  - q: 'A failure that callers are expected to recover from (retry, fall back) should extend…'
+    options:
+      - '`RuntimeException` — modern code never uses checked exceptions'
+      - text: '`Exception` — checked, so the compiler makes callers confront it'
+        correct: true
+      - '`Error` — it is outside normal flow'
+    explain: 'Recoverable-and-expected is exactly the checked niche: the handle-or-declare rule forces a conscious decision at every call site. Bugs and unrecoverable states go unchecked; `Error` is reserved for the JVM.'
+```
 
 :::key
 `throw` raises, `throws` declares (checked only). Give custom exceptions a `(message, cause)` constructor and meaningful fields. When catching a low-level exception and rethrowing your own, **always pass the original as the cause** — losing it destroys the stack trace.

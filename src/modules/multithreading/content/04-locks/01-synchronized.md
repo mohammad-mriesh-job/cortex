@@ -135,6 +135,24 @@ synchronized void outer() { inner(); }   // already holds this...
 synchronized void inner() { /* ... */ }  // ...re-enters, no deadlock
 ```
 
+## What the JVM does to make it fast
+
+"`synchronized` is slow" is 2005 folklore. The modern JVM applies a stack of optimizations:
+
+- **Thin locks** — an uncontended acquire is a single CAS on the object header's *mark word*; no OS
+  call, a few nanoseconds. Only under real contention does the lock **inflate** to a full OS-backed
+  monitor with an entry set.
+- **Biased locking is gone** — the old "bias the lock to its first thread" trick was removed in
+  **JDK 15** (JEP 374): it complicated the JVM and mostly helped legacy code like `Vector`. If an
+  interviewer mentions biasing, know it no longer exists.
+- **Lock coarsening** — the JIT merges adjacent `synchronized` blocks on the same object (e.g. a
+  loop of `StringBuffer.append`) into one acquire/release pair.
+- **Lock elision** — escape analysis proves an object never leaves the thread, and the JIT deletes
+  its locking entirely; a `synchronized` on a purely local object costs nothing.
+
+The consequence: choose between `synchronized` and `ReentrantLock` on **features**, not folklore
+about speed — uncontended, they are equally fast.
+
 :::gotcha
 **Lock on the wrong object and your `synchronized` protects nothing.** Three classic traps:
 `synchronized (Integer.valueOf(1))` — autoboxing caches small `Integer`s, so unrelated code that

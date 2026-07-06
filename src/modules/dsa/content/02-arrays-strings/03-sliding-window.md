@@ -20,6 +20,19 @@ you don't start over.
 | **Fixed** | Constant `k` | Max sum of any subarray of size `k` |
 | **Variable** | Grows / shrinks by a rule | Longest substring without repeating chars |
 
+The first decision in every window problem is which flavor you are in — it picks the template:
+
+```mermaid
+flowchart TD
+  P["Contiguous subarray or substring problem"] --> K{"Is the window size given?"}
+  K -->|"yes — fixed k"| F["Fixed window: one slide per step, sum += enter - leave"]
+  K -->|"no — a constraint instead"| V["Variable window: expand R every step"]
+  V --> I{"Window still satisfies the constraint?"}
+  I -->|"yes"| Rec["Record best, expand R again"]
+  I -->|"no"| Sh["Shrink from L until valid again"]
+  Sh --> Rec
+```
+
 ## Fixed window: max sum of size k
 
 Brute force sums every window from scratch — O(n·k). The window trick keeps a running sum:

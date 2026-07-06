@@ -80,8 +80,21 @@ count++;   // STILL read-modify-write: read, +1, write — three steps
 ```
 
 Two threads can both read the same `count`, both increment, and both write back the same number — the
-exact **lost update** from the race-conditions topic. Visibility was never the problem there;
-atomicity was.
+exact **lost update** from the race-conditions topic. Watch it happen *with* volatile — every access
+goes straight to main memory, visibility is perfect, and the update is still lost:
+
+| Step | Thread A | Thread B | volatile `count` |
+|--|--|--|--|
+| 1 | volatile read → 5 | — | 5 |
+| 2 | — | volatile read → 5 | 5 |
+| 3 | +1 in register → 6 | — | 5 |
+| 4 | volatile write 6 | — | 6 |
+| 5 | — | +1 in its register → 6 | 6 |
+| 6 | — | volatile write 6 | **6 — A's increment lost** |
+
+Every single read and write obeyed volatile semantics. The bug is the **gap between B's read (step
+2) and B's write (step 6)** — volatile does nothing to close it. Visibility was never the problem
+here; atomicity was.
 
 ````tabs
 tabs:
@@ -107,6 +120,24 @@ tabs:
       void reload() { cfg = load(); }      // one atomic reference write
       ```
 ````
+
+Safe publication works because of the **piggyback effect**: the happens-before edge from the
+volatile write to the volatile read carries *all* of the writer's earlier plain writes with it.
+
+```mermaid
+flowchart LR
+  subgraph W["Thread 1 writer"]
+    A["cfg = new Config()  (plain write)"] --> B["ready = true  (volatile write)"]
+  end
+  subgraph R["Thread 2 reader"]
+    C["sees ready == true  (volatile read)"] --> D["reads cfg — guaranteed fully built"]
+  end
+  B -->|"happens-before edge"| C
+```
+
+Program order gives `A hb B`, the volatile rule gives `B hb C`, program order gives `C hb D` —
+transitivity chains them, so the plain `cfg` write is visible even though `cfg` itself is not
+volatile. Remove the volatile from `ready` and the whole chain collapses.
 
 :::gotcha
 `volatile` does **not** make `count++` atomic. It is read-modify-write no matter how the field is

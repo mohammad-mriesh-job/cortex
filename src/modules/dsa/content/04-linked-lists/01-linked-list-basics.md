@@ -157,6 +157,23 @@ LRU caches and adjacency lists. Default to arrays; reach for linked lists when t
 manipulation itself is the feature.
 :::
 
+## Recall
+
+```flashcards
+title: Linked list costs
+cards:
+  - front: '`get(i)` on a linked list'
+    back: '**O(n)** — walk `i` pointers from the head. No address arithmetic possible.'
+  - front: 'Insert at head'
+    back: '**O(1)** — new node points at old head, `head` moves. The list''s cheapest op.'
+  - front: 'Delete the tail: singly vs doubly linked'
+    back: 'Singly: **O(n)** (must walk to the second-to-last node). Doubly: **O(1)** via `tail.prev`.'
+  - front: 'Delete a node you already hold a reference to'
+    back: 'Doubly: **O(1)** — `prev`/`next` are one hop away. Singly: O(n) to find the predecessor.'
+  - front: 'Why does `ArrayList` often beat `LinkedList` even at inserts?'
+    back: '**Cache locality + no per-node objects.** The linked list only wins when you splice at a node you already hold — LRU caches, adjacency lists.'
+```
+
 ## Check yourself
 
 ```quiz

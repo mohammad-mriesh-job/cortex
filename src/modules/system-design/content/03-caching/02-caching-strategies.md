@@ -181,6 +181,21 @@ with short TTLs, versioned keys, or deleting (not updating) the key on write. Th
 lock-free way to make cache-aside perfectly consistent — you bound staleness, not eliminate it.
 :::
 
+```flashcards
+title: Caching strategies — one-liners
+cards:
+  - front: 'Cache-aside'
+    back: '**App** checks cache, loads DB on miss, populates cache. Write: update DB, **delete** the key. The production default.'
+  - front: 'Read-through'
+    back: 'Same lazy shape, but the **cache library** owns the DB loader — app only talks to the cache.'
+  - front: 'Write-through'
+    back: 'Write cache **and** DB synchronously. Strong read-after-write consistency, but every write pays two hops.'
+  - front: 'Write-back (write-behind)'
+    back: 'Ack from cache memory, flush to DB **async/batched**. Fastest writes; crash before flush = data loss. For counters, not money.'
+  - front: 'Cache-aside write rule'
+    back: '**Delete, don''t update** the cached key on write — updating in place races with concurrent writes and can pin a stale value.'
+```
+
 ## Check yourself
 
 ```quiz

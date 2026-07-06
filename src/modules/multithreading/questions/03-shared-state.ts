@@ -268,6 +268,320 @@ Singleton get() {
 DCL is subtle and easy to get wrong. Prefer the **holder idiom** (\`static class Holder { static final Singleton INSTANCE = new Singleton(); }\`) — the JVM's class-initialization lock gives lazy, thread-safe, lock-free-on-the-hot-path init with no \`volatile\` to remember.
 :::`,
   },
+  {
+    id: 'mt-shared-atomicity-visibility-ordering',
+    question: 'Explain the difference between atomicity, visibility, and ordering.',
+    difficulty: 'Medium',
+    category: 'The Shared-State Problem',
+    tags: ['atomicity', 'visibility', 'ordering', 'jmm'],
+    answer: `They are three **independent** correctness properties, and a race can violate any one of them.
+
+| Property | Meaning | Violated by | Fixed with |
+|---|---|---|---|
+| **Atomicity** | an action is indivisible; no thread sees a partial result | \`count++\` losing an update | locks, atomics |
+| **Visibility** | a write becomes observable to other threads | a flag loop that never terminates | \`volatile\`, locks, \`final\` |
+| **Ordering** | operations aren't reordered in a way others observe | unsafe publication of a half-built object | \`volatile\` / happens-before |
+
+- \`volatile\` gives **visibility + ordering** but **not** atomicity of a read-modify-write.
+- \`synchronized\` gives **all three** for its critical section.
+
+:::key
+Diagnose *which* property a bug violates before picking a tool: a lost update is an **atomicity** failure, so \`volatile\` (visibility only) can never fix it.
+:::`,
+  },
+  {
+    id: 'mt-shared-increment-bytecode',
+    question: 'At the bytecode level, why is `i++` not atomic?',
+    difficulty: 'Medium',
+    category: 'The Shared-State Problem',
+    tags: ['bytecode', 'atomicity', 'read-modify-write', 'increment'],
+    answer: `\`javac\` compiles an increment of a **shared field** into three separable bytecodes, and a thread can be preempted between them:
+
+\`\`\`
+getfield count      // read
+iconst_1, iadd      // compute +1
+putfield count      // write
+\`\`\`
+
+Starting from \`count == 0\`, two threads can interleave so one write clobbers the other:
+
+| Step | Thread A | Thread B | count |
+|---|---|---|---|
+| 1 | getfield -> 0 | | 0 |
+| 2 | | getfield -> 0 | 0 |
+| 3 | iadd -> 1 | | 0 |
+| 4 | | iadd -> 1 | 0 |
+| 5 | putfield 1 | | 1 |
+| 6 | | putfield 1 | 1 |
+
+Two increments ran; \`count\` is **1**, not 2. **Fix:** \`AtomicInteger.incrementAndGet()\` (a single CAS) or a lock.
+
+:::gotcha
+A *local* variable compiles to the single \`iinc\` instruction, but locals live on a thread's private stack and are never shared. A shared field always compiles to the \`getfield\`/\`putfield\` pair above.
+:::`,
+  },
+  {
+    id: 'mt-shared-safe-publication-idioms',
+    question: 'What are the safe ways to publish an object to other threads?',
+    difficulty: 'Hard',
+    category: 'The Shared-State Problem',
+    tags: ['safe-publication', 'visibility', 'final', 'jmm'],
+    answer: `An object is **safely published** when *both* its reference and its fully-constructed state are guaranteed visible to any thread that reads the reference. The JMM sanctions these idioms:
+
+1. Initialize it from a **static initializer** — the class-init lock publishes it.
+2. Store the reference into a **\`volatile\`** field or an **\`AtomicReference\`**.
+3. Store it into a **\`final\`** field of a properly-constructed object.
+4. Store it into a field **guarded by a lock** (write and read under the *same* lock).
+5. Put it into a **thread-safe collection** (\`ConcurrentHashMap\`, \`BlockingQueue\`, \`Vector\`, ...).
+
+\`\`\`java
+private volatile Config cfg;   // idiom 2
+cfg = new Config();            // reference + state now safely published
+\`\`\`
+
+:::gotcha
+Publishing via a **plain, non-final** field is **unsafe**: a reader may see the reference before the constructor's writes land, observing a partially-constructed object.
+:::`,
+  },
+  {
+    id: 'mt-shared-leaking-this',
+    question: 'What does it mean for `this` to escape during construction, and why is it dangerous?',
+    difficulty: 'Hard',
+    category: 'The Shared-State Problem',
+    tags: ['this-escape', 'safe-publication', 'construction', 'factory'],
+    answer: `\`this\` **escapes** when a constructor hands out a reference to the object *before construction finishes* — registering a listener, passing \`this\` to external code, or starting a thread that uses the instance.
+
+\`\`\`java
+public Widget(EventSource src) {
+    src.registerListener(this);   // ESCAPE: another thread can call us now...
+    this.name = "widget";         // ...but this field isn't set yet
+}
+\`\`\`
+
+Another thread may then observe the object with \`final\` fields not yet frozen and subclass fields still at their defaults — a **half-initialized** view.
+
+**Fix** — construct fully, publish afterward, with a private constructor + static factory:
+
+\`\`\`java
+public static Widget create(EventSource src) {
+    Widget w = new Widget();   // fully built first
+    src.registerListener(w);   // published only now
+    return w;
+}
+\`\`\`
+
+:::key
+Never let \`this\` (nor an inner-class \`this\`, nor a thread you \`start()\`) escape a constructor. Build first, publish second.
+:::`,
+  },
+  {
+    id: 'mt-shared-thread-confinement',
+    question: 'What is thread confinement, and what are its forms?',
+    difficulty: 'Medium',
+    category: 'The Shared-State Problem',
+    tags: ['thread-confinement', 'stack-confinement', 'threadlocal', 'thread-safety'],
+    answer: `If data is only ever reachable by **one thread**, it needs no synchronization — the cheapest safety strategy is to not share at all. Three forms, weakest to strongest:
+
+| Form | How it's confined | Strength |
+|---|---|---|
+| **Ad-hoc** | by convention/discipline only | fragile |
+| **Stack** | locals & parameters that never escape | strong, automatic — each thread owns its stack |
+| **ThreadLocal** | a per-thread copy behind \`ThreadLocal\` | strong, explicit |
+
+Real examples: Swing confines UI state to the single **event-dispatch thread**; a JDBC \`Connection\` is handed to **one thread at a time** from the pool.
+
+:::key
+Stack confinement is the strongest because the JVM enforces it: a local reference that never escapes simply cannot be touched by another thread.
+:::`,
+  },
+  {
+    id: 'mt-shared-immutability-strongest',
+    question: 'Why is immutability the strongest tool for thread safety?',
+    difficulty: 'Medium',
+    category: 'The Shared-State Problem',
+    tags: ['immutability', 'thread-safety', 'final', 'records'],
+    answer: `An **immutable** object has no mutable state, so every thread can only **read** it — no races, no locks, and it can be shared freely and published safely through \`final\` fields. Correctness stops depending on timing entirely.
+
+Requirements for true immutability:
+
+- The class is **\`final\`** (or otherwise non-subclassable).
+- **All fields are \`final\`** and set only in the constructor.
+- **No setters or mutators.**
+- **Defensively copy** any mutable input or output (arrays, collections, \`Date\`).
+- **\`this\` must not escape** during construction.
+
+\`\`\`java
+public record Point(int x, int y) {}   // final fields, no setters — immutable
+\`\`\`
+
+:::senior
+Distinguish **immutable** (can never change) from **effectively immutable** (a mutable type that simply is never mutated after safe publication). Both are thread-safe once published; only the first is enforced by the compiler.
+:::`,
+  },
+  {
+    id: 'mt-shared-toctou',
+    question: 'What is a TOCTOU bug?',
+    difficulty: 'Medium',
+    category: 'The Shared-State Problem',
+    tags: ['toctou', 'check-then-act', 'race-condition', 'security'],
+    answer: `**TOCTOU** — *Time-Of-Check-To-Time-Of-Use* — is a check-then-act race: the state changes **between** checking a condition and acting on it, so you act on a stale fact.
+
+\`\`\`java
+if (file.exists()) open(file);        // symlink swapped in between -> classic security hole
+if (!set.contains(x)) set.add(x);     // another thread inserts x between the two calls
+if (map.size() == 0) map.remove(k);   // the size check is already stale when remove runs
+\`\`\`
+
+**Fix** — collapse check-and-act into **one atomic operation** (\`putIfAbsent\`, \`computeIfAbsent\`, \`compareAndSet\`) or hold a lock across both steps.
+
+:::gotcha
+TOCTOU is also a **security** bug class: an attacker races the window between check and use (e.g., swapping a file for a symlink) to slip past a permission check. Atomicity closes the window.
+:::`,
+  },
+  {
+    id: 'mt-shared-no-benign-race',
+    question: "Is there such a thing as a 'benign' data race?",
+    difficulty: 'Hard',
+    category: 'The Shared-State Problem',
+    tags: ['data-race', 'jmm', 'undefined-behavior', 'visibility'],
+    answer: `**Almost never.** Under the JMM a **data race** (unsynchronized conflicting access) is *undefined* — the compiler is allowed to assume no race exists and optimize on that basis. You can observe stale values forever, torn values on a 64-bit \`long\`/\`double\`, or even out-of-thin-air results.
+
+\`\`\`java
+boolean stop;              // plain field, racily read
+while (!stop) work();      // the JIT may hoist the read...
+// ...into: if (!stop) while (true) work();  -> stop = true is never seen
+\`\`\`
+
+So "this race is harmless" is not something you can safely reason about — the *optimizer* decides, not your intuition.
+
+The one real exception: reads of **properly-published immutable** data — there is no conflicting *write*, so there is no race at all.
+
+:::gotcha
+Don't bet on a benign race; synchronize correctly. A \`volatile\` or a lock costs almost nothing next to a heisenbug that only surfaces under load in production.
+:::`,
+  },
+  {
+    id: 'mt-shared-lost-update-schedule',
+    question: 'Show, step by step, how two threads incrementing a shared counter can lose an update.',
+    difficulty: 'Medium',
+    category: 'The Shared-State Problem',
+    tags: ['lost-update', 'interleaving', 'read-modify-write', 'atomicity'],
+    answer: `Each thread runs \`count++\` as **read -> add -> write**. If both *read* before either *writes*, they compute the same new value and the second write overwrites the first. Starting from \`count == 0\`:
+
+| Step | Thread A | Thread B | count |
+|---|---|---|---|
+| 1 | read (sees 0) | | 0 |
+| 2 | | read (sees 0) | 0 |
+| 3 | add -> 1 | | 0 |
+| 4 | | add -> 1 | 0 |
+| 5 | write 1 | | 1 |
+| 6 | | write 1 | 1 |
+
+Two increments executed, yet \`count\` ends at **1** — one update was lost.
+
+A **serialized** run (A does read/add/write, *then* B does read/add/write) yields **2**; the bug is that the steps can overlap.
+
+:::key
+The fix makes the whole read-modify-write **indivisible** — \`AtomicInteger.incrementAndGet()\` or a lock — so no interleaving like the one above can occur.
+:::`,
+  },
+  {
+    id: 'mt-shared-effectively-immutable',
+    question: "What is an 'effectively immutable' object, and when is it safe to share?",
+    difficulty: 'Medium',
+    category: 'The Shared-State Problem',
+    tags: ['effectively-immutable', 'safe-publication', 'immutability', 'thread-safety'],
+    answer: `An **effectively immutable** object has a technically **mutable** type but is **never modified after publication** — for example a \`Date\`, or a populated \`List\` placed into a \`ConcurrentMap\` and thereafter only read.
+
+If it is **safely published**, it can then be shared by many threads with **no further synchronization**. Three cases:
+
+| Kind | Safe to share? |
+|---|---|
+| **Immutable** (all \`final\`, no mutators) | always |
+| **Effectively immutable** (mutable type, never mutated after publish) | yes — *if* safely published, then read-only |
+| **Mutable and shared** | only with synchronization on **every** access |
+
+\`\`\`java
+map.put("today", new Date());   // safely published; just never mutate that Date again
+\`\`\`
+
+:::gotcha
+"Effectively immutable" rests on **discipline**: the moment any thread mutates the object after publication, you're back to a mutable-and-shared race. The compiler won't stop you.
+:::`,
+  },
+  {
+    id: 'mt-shared-defensive-copy',
+    question: 'Why do defensive copies matter for a thread-safe (or immutable) class?',
+    difficulty: 'Medium',
+    category: 'The Shared-State Problem',
+    tags: ['defensive-copy', 'immutability', 'encapsulation', 'thread-safety'],
+    answer: `If a class stores a caller-supplied **mutable** object (array, collection, \`Date\`) by reference, or hands its internal reference back from a getter, external code can **mutate the shared internal state** concurrently — breaking invariants and defeating immutability.
+
+Copy on the way **in** and on the way **out**:
+
+\`\`\`java
+public final class Reading {
+    private final int[] samples;
+    public Reading(int[] samples) {
+        this.samples = samples.clone();   // copy IN — caller keeps no live handle
+    }
+    public int[] samples() {
+        return samples.clone();           // copy OUT — caller can't mutate ours
+    }
+}
+\`\`\`
+
+Without the copies, a caller mutating the array it passed (or the array it got back) corrupts state that other threads are reading.
+
+:::key
+Encapsulation is a thread-safety tool: if no external reference can reach your mutable state, no other thread can race on it.
+:::`,
+  },
+  {
+    id: 'mt-shared-stateless-safe',
+    question: 'Why are stateless objects always thread-safe?',
+    difficulty: 'Easy',
+    category: 'The Shared-State Problem',
+    tags: ['stateless', 'thread-safety', 'stack-confinement', 'servlet'],
+    answer: `A **stateless** object has no fields (or only immutable ones), so there is **no shared mutable state to corrupt**. Every method call works solely on its **local variables and parameters**, which live on the calling thread's own stack — private to that thread.
+
+\`\`\`java
+public class TaxService {            // no fields
+    public int tax(int amount) {     // 'amount' and locals are stack-confined
+        return amount * 7 / 100;
+    }
+}
+\`\`\`
+
+That's why a stateless Servlet or a Spring \`@Service\` singleton safely handles concurrent requests without any synchronization.
+
+:::gotcha
+Thread safety evaporates the instant you add a **mutable instance field** — a counter, a cached last-result — to a shared stateless object: now every request races on it.
+:::`,
+  },
+  {
+    id: 'mt-shared-guarded-by',
+    question: 'What is `@GuardedBy` and why document a synchronization policy?',
+    difficulty: 'Easy',
+    category: 'The Shared-State Problem',
+    tags: ['guardedby', 'synchronization-policy', 'documentation', 'thread-safety'],
+    answer: `\`@GuardedBy("lock")\` records **which lock guards a given mutable field**, making the class's *synchronization policy* explicit — and checkable by static-analysis tools.
+
+\`\`\`java
+private final Object lock = new Object();
+@GuardedBy("lock") private int balance;
+
+void deposit(int n) {
+    synchronized (lock) { balance += n; }   // access holds the documented lock
+}
+\`\`\`
+
+A class is thread-safe only if **every** access to a piece of shared state holds the **correct** lock. An undocumented or inconsistently-applied policy is exactly how bugs creep in — one unguarded read is enough.
+
+:::key
+The discipline: name **one guard per invariant**, document it with \`@GuardedBy\`, and honor it on **every** read and write. A written-down policy is one a reviewer — or a tool — can enforce.
+:::`,
+  },
 ];
 
 export default questions;

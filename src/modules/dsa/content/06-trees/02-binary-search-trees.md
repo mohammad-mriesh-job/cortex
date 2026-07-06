@@ -28,11 +28,8 @@ flowchart TD
   N3 --> N6((6))
   N6 --> N4((4))
   N6 --> N7((7))
-  N10 --> L10[ ]:::ghost
-  N10 --> N14((14))
-  N14 --> N13((13))
-  N14 --> R14[ ]:::ghost
-  classDef ghost fill:transparent,stroke:transparent,color:transparent;
+  N10 -->|"right only"| N14((14))
+  N14 -->|"left only"| N13((13))
 ```
 
 Check the rule anywhere: under `8`, everything on the left (`3, 1, 6, 4, 7`) is `< 8` and
@@ -172,6 +169,15 @@ fix this by rotating after each update — the subject of the next topic.
 | Insert | O(log n) | O(n) |
 | Delete | O(log n) | O(n) |
 | In-order (sorted) traversal | O(n) | O(n) |
+
+:::senior
+The classic BST interview trap is **"validate a BST"**: checking only `left.val < node.val <
+right.val` at each node is wrong — a grandchild can violate the invariant while every local check
+passes. The correct approach passes a **(min, max) range** down the recursion, tightening one
+bound per side. And in production Java you rarely hand-roll a BST: `TreeMap`/`TreeSet` are
+red-black trees giving you `floor`, `ceiling`, `firstKey`, and range views in guaranteed
+O(log n).
+:::
 
 ## Check yourself
 

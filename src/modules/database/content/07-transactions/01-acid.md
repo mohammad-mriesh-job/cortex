@@ -65,6 +65,26 @@ sequenceDiagram
     DB-->>T: balances as if the txn never ran
 ```
 
+The same all-or-nothing behaviour, runnable:
+
+```sql
+BEGIN;
+UPDATE accounts SET balance = balance - 100 WHERE owner = 'Alice';
+UPDATE accounts SET balance = balance + 100 WHERE owner = 'Bob';
+ROLLBACK;   -- simulate the failure path
+
+SELECT owner, balance FROM accounts WHERE owner IN ('Alice', 'Bob');
+-- Alice | 500      <- unchanged: the debit was undone with the credit
+-- Bob   | 200
+```
+
+:::note
+Autocommit is the default in every major client: **each statement is its own transaction**
+unless you open one with `BEGIN` (`START TRANSACTION` in MySQL). Forgetting this cuts both
+ways — you lose the ability to roll back multi-statement work, and long-running "forgot to
+commit" sessions hold locks and bloat undo.
+:::
+
 ## Consistency — only valid states commit
 
 Consistency means the database moves from one **valid state to another** — never violating a

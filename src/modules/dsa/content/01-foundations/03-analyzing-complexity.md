@@ -26,7 +26,7 @@ flowchart TD
   A -->|"No, side by side"| B["ADD → keep the biggest"]
   A -->|"Yes, one inside another"| C["MULTIPLY the ranges"]
   Q --> D{"Recursive?"}
-  D -->|"Yes"| E["Draw the call tree:<br/>branches ^ depth"]
+  D -->|"Yes"| E["Draw the call tree: branches ^ depth"]
 ```
 
 ## Sequential is addition, not multiplication
@@ -147,7 +147,7 @@ the rare spike over the many cheap ops. The classic case: appending to a dynamic
 
 ```mermaid
 flowchart LR
-  A["append: O(1)"] --> B["append: O(1)"] --> C["append: O(1)"] --> D["FULL → resize<br/>copy all n: O(n)"] --> E["append: O(1)"]
+  A["append: O(1)"] --> B["append: O(1)"] --> C["append: O(1)"] --> D["FULL → resize, copy all n: O(n)"] --> E["append: O(1)"]
 ```
 
 When the backing array fills, it **doubles** in size and copies everything — an O(n) hit. But
@@ -164,6 +164,25 @@ doubling means resizes get rarer and rarer, so across `n` appends the total copy
 *guarantee* that a rare expensive step is paid for by many cheap ones. `ArrayList.add` is
 amortized O(1) no matter the input.
 :::
+
+## Recall
+
+```flashcards
+title: Complexity-reading reflexes
+cards:
+  - front: 'Two loops, one AFTER the other, both over n'
+    back: '**O(n)** — sequential loops add: O(n) + O(n) = O(n).'
+  - front: 'Two loops, one INSIDE the other, both over n'
+    back: '**O(n²)** — nested loops multiply.'
+  - front: 'Loop doing `i /= 2` from n down to 1'
+    back: '**O(log n)** — halving reaches 1 in log₂(n) steps.'
+  - front: 'Triangular loop: inner `j` starts at `i`'
+    back: 'n + (n−1) + … + 1 = n(n+1)/2 → still **O(n²)**.'
+  - front: 'Recursion cost formula'
+    back: '**(work per call) × (number of calls)** — count calls via the recursion tree: branches ^ depth.'
+  - front: 'Amortized O(1) vs average case O(1)'
+    back: 'Amortized is a **guarantee over a sequence** (rare O(n) resize paid off by many O(1) appends); average case depends on **lucky input distribution**.'
+```
 
 ## Check yourself
 

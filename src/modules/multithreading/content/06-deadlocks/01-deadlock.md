@@ -130,6 +130,26 @@ another thread holds in reverse, or a non-reentrant lock re-acquired by the same
 resource types differ; the **circular wait** is identical.
 :::
 
+## Drill the four conditions
+
+Interviewers ask these as a list, then follow up with "which one would you break?" — drill both
+directions.
+
+```flashcards
+title: Coffman conditions — and how to break each
+cards:
+  - front: 'Condition 1: Mutual exclusion'
+    back: 'A resource is held in a **non-shareable** mode — one owner at a time. Break it: use lock-free/atomic structures or immutable data, so there is nothing exclusive to hold.'
+  - front: 'Condition 2: Hold and wait'
+    back: 'A thread **holds** one resource while **waiting** for another. Break it: acquire *all* locks up front in one atomic step, or release what you hold before waiting (`tryLock` + back off).'
+  - front: 'Condition 3: No preemption'
+    back: 'A resource cannot be forcibly taken from its owner. Break it: use **timed** acquisition (`tryLock(t, u)`) so a thread effectively preempts itself and releases on timeout.'
+  - front: 'Condition 4: Circular wait'
+    back: 'A closed chain: T1 → resource held by T2 → resource held by T1. Break it: impose a **global lock ordering** — everyone acquires locks in the same order, so no cycle can form. This is the standard production fix.'
+  - front: 'Why is breaking ONE condition enough?'
+    back: 'Deadlock requires **all four simultaneously** — they are jointly necessary. Removing any single one makes the cycle impossible; lock ordering (killing circular wait) is the cheapest and most common choice.'
+```
+
 ## Check yourself
 
 ```quiz

@@ -16,7 +16,7 @@ A router (client library, proxy, or coordinator) maps each row to a shard using 
 
 ```mermaid
 flowchart TD
-  W["write / read for user_id = 8123"] --> R{"Router:<br/>shard = f(shard_key)"}
+  W["write / read for user_id = 8123"] --> R{"Router: shard = f(shard_key)"}
   R -->|"users A–H"| S0[("Shard 0")]
   R -->|"users I–P"| S1[("Shard 1")]
   R -->|"users Q–Z"| S2[("Shard 2")]
@@ -57,11 +57,11 @@ The shard key determines whether your system scales gracefully or falls over. A 
 
 ```mermaid
 flowchart TD
-  K["Candidate shard key"] --> D{"Spreads load<br/>evenly?"}
+  K["Candidate shard key"] --> D{"Spreads load evenly?"}
   D -->|No| HOT["Hotspot — one shard melts"]
-  D -->|Yes| Q{"Do common queries<br/>include the key?"}
-  Q -->|No| SG["Scatter-gather — every query<br/>fans out to all shards"]
-  Q -->|Yes| GOOD["Good shard key ✓"]
+  D -->|Yes| Q{"Do common queries include the key?"}
+  Q -->|No| SG["Scatter-gather — every query fans out to all shards"]
+  Q -->|Yes| GOOD["Good shard key"]
 ```
 
 :::gotcha

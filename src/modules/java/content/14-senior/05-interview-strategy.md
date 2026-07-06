@@ -61,11 +61,11 @@ For senior roles this round carries the most weight. Drive it; don't wait to be 
 
 ```mermaid
 flowchart LR
-    A[Scope & requirements] --> B[Estimate load]
-    B --> C[API & data model]
-    C --> D[High-level design]
-    D --> E[Drill into bottlenecks]
-    E --> F[State trade-offs]
+    A["Scope & requirements"] --> B["Estimate load"]
+    B --> C["API & data model"]
+    C --> D["High-level design"]
+    D --> E["Drill into bottlenecks"]
+    E --> F["State trade-offs"]
 ```
 
 1. **Scope** — functional and non-functional requirements (latency, consistency, scale). Don't design what wasn't asked for.
@@ -93,6 +93,34 @@ What sinks otherwise strong candidates:
 - **Over-engineering** — reaching for microservices, Kafka, and Kubernetes on a problem that needs a table and a cron job.
 - **Badmouthing** former employers or teammates.
 :::
+
+## Check yourself
+
+```quiz
+title: Interview strategy
+questions:
+  - q: 'What answer shape best signals senior judgment?'
+    options:
+      - text: 'Direct claim → the mechanism/why → a trade-off or caveat → a concrete example'
+        correct: true
+      - 'List every fact you know about the topic'
+      - 'Give the shortest possible yes/no'
+    explain: 'A tight claim-mechanism-tradeoff-example shape shows you understand *why*, not just *what*. When the honest answer is "it depends," naming the dimensions it depends on *is* the senior answer.'
+  - q: 'In a coding round, what should you do *before* writing code?'
+    options:
+      - text: 'Clarify the constraints, then state your approach and its time/space complexity out loud'
+        correct: true
+      - 'Start typing the optimal solution immediately'
+      - 'Ask the interviewer for the answer'
+    explain: 'Interviewers grade process. Clarify inputs/edge cases/scale, state the approach and complexity, get buy-in, then narrate as you code and test edge cases unprompted. A working brute force you then optimize beats a perfect solution you never finish.'
+  - q: 'An interviewer asks something you genuinely do not know. What is the strongest move?'
+    options:
+      - text: 'Say you don''t know, then describe how you''d figure it out'
+        correct: true
+      - 'Confidently invent a plausible-sounding answer'
+      - 'Change the subject to something you do know'
+    explain: 'Senior interviewers probe, and confident wrongness (bluffing) is a hard no. Honest "I don''t know, but here''s how I''d find out" demonstrates exactly the judgment they are screening for.'
+```
 
 :::key
 Interviews test whether you can be trusted with ambiguity and production, not trivia recall. Identify the question's **category**, answer in a tight **claim → mechanism → trade-off → example** shape, and signal depth by naming **boundaries and failure modes**. In coding rounds, **clarify and state complexity before typing**; in system design, **drive the structure** and reason about trade-offs. Use **STAR** for behavioral — and above all, never bluff.

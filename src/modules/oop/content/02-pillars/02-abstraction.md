@@ -16,10 +16,8 @@ is the abstraction; the engine is the hidden complexity.
 
 ```mermaid
 flowchart LR
-    Driver(["Driver"]) -->|"press pedal (what)"| Pedal["Accelerator"]
-    Pedal -.hides.-> Engine["⚙️ fuel · spark · gearbox<br/>(how)"]
-    classDef hide fill:#eef,stroke:#88a,stroke-dasharray:4;
-    class Engine hide;
+    Driver(["Driver"]) -->|"press pedal (the what)"| Pedal["Accelerator"]
+    Pedal -.hides.-> Engine["fuel, spark, gearbox (the how)"]
 ```
 
 The driver programs against a *simple contract* — "go faster" — insulated from the messy
@@ -108,6 +106,41 @@ tabs:
 :::tip
 Default to an **interface** — it's more flexible (a class can implement many). Reach for an
 **abstract class** only when you have real shared state or implementation to inherit.
+:::
+
+## Abstraction in the JDK you already use
+
+- **JDBC** — your code talks to `java.sql.Connection` and `PreparedStatement`; whether Postgres
+  or MySQL answers is a driver detail. Swap the driver, keep the code.
+- **Collections** — you declare `List<Order>` everywhere and pick `ArrayList` vs `LinkedList` in
+  exactly one place: the `new`.
+- **`InputStream`** — file, socket, or in-memory bytes behind one `read()` contract.
+- **Spring** — `PlatformTransactionManager` abstracts JDBC vs JPA vs JTA transactions;
+  `@Transactional` code never learns which one runs.
+
+The recurring shape: callers depend on the **contract**, so implementations stay swappable.
+
+:::gotcha
+"Abstraction means using the `abstract` keyword" — no. Abstraction is a **design activity**:
+deciding what a caller needs to know and hiding the rest. Interfaces, abstract classes, and even a
+well-named public method over three private helpers all abstract. Interviewers probe exactly this
+with *"can you have abstraction without an abstract class?"* — yes: every interface, and arguably
+every good API surface, is one.
+:::
+
+## When abstraction is over-applied
+
+Every abstraction adds a layer between the reader and the behaviour, so each one must pay rent.
+The classic failure is the **speculative interface**: `OrderService` + `OrderServiceImpl`, one
+implementation, forever — indirection cost with zero swap benefit. Abstract when there are two
+real implementations, a genuine boundary you need to fake in tests (clock, payment gateway,
+filesystem), or a published API to protect. Not "just in case".
+
+:::senior
+A strong answer separates the levels: abstraction chooses **what to expose** (design);
+encapsulation **enforces** that boundary (mechanism). It also names the cost — "the wrong
+abstraction is worse than duplication" (Sandi Metz), because once callers bend around a shape that
+doesn't fit, unwinding it is harder than copying code ever was.
 :::
 
 ## Abstraction vs Encapsulation

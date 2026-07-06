@@ -126,13 +126,11 @@ Every index **speeds reads but slows writes**: each `INSERT`/`UPDATE`/`DELETE` m
 
 ```mermaid
 flowchart LR
-  W["INSERT one row"] --> T["Table / heap"]
-  W --> I1["update ix_email"]
-  W --> I2["update ix_status"]
-  W --> I3["update ix_created"]
-  W --> I4["update ix_region"]
-  class I1,I2,I3,I4 cost;
-  classDef cost fill:#b23b3b,stroke:#7f1d1d,color:#fff;
+  W["INSERT one row"] --> T["1 write: table heap"]
+  W --> I1["extra write: ix_email"]
+  W --> I2["extra write: ix_status"]
+  W --> I3["extra write: ix_created"]
+  W --> I4["extra write: ix_region"]
 ```
 
 ```flashcards

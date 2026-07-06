@@ -16,11 +16,11 @@ write an efficient algorithm over it.
 
 ```mermaid
 flowchart TD
-  P["Problem"] --> D["Data Structure<br/>(how data is stored)"]
-  P --> A["Algorithm<br/>(steps to solve it)"]
+  P["Problem"] --> D["Data structure: how data is stored"]
+  P --> A["Algorithm: steps to solve it"]
   D --> S["Solution"]
   A --> S
-  S --> M["Measured by Big-O<br/>(time & space)"]
+  S --> M["Measured by Big-O: time and space"]
 ```
 
 Every LeetCode problem is really this loop: **choose a structure**, **run an algorithm**,
@@ -40,8 +40,8 @@ An **ADT** describes *what* a structure does (its operations and guarantees) wit
 
 ```mermaid
 flowchart LR
-  ADT["ADT: List<br/>get / add / remove"] --> I1["ArrayList<br/>(backed by array)"]
-  ADT --> I2["LinkedList<br/>(backed by nodes)"]
+  ADT["ADT List: get, add, remove"] --> I1["ArrayList — backed by an array"]
+  ADT --> I2["LinkedList — backed by nodes"]
 ```
 
 | ADT (the contract) | Common implementations | Key operations |
@@ -71,6 +71,13 @@ very different Big-O.
 Don't memorize solutions — learn the **structure + pattern** pairing. "Find a pair summing to
 a target" is a hash-map or two-pointer problem whether the values are prices, temperatures, or
 exam scores.
+:::
+
+:::gotcha
+The classic silent killer: calling `list.contains(x)` inside a loop. Each call scans the whole
+list — O(n) — so the loop becomes **O(n²)**. Swapping the `ArrayList` for a `HashSet` makes the
+same code O(n). Interviewers plant this deliberately: the *algorithm* looked fine; the
+*structure* was wrong.
 :::
 
 ## Recall

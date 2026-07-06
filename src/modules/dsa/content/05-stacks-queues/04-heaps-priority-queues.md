@@ -25,6 +25,20 @@ onto an array with pure index arithmetic — no node objects, no child pointers:
 | right child | `2 * i + 2` |
 | the min (min-heap) | always `a[0]` |
 
+The array `[1, 5, 8, 10, 12, 9]` **is** this tree — read the levels left to right:
+
+```mermaid
+flowchart TD
+  N0["index 0: value 1"] --> N1["index 1: value 5"]
+  N0 --> N2["index 2: value 8"]
+  N1 --> N3["index 3: value 10"]
+  N1 --> N4["index 4: value 12"]
+  N2 --> N5["index 5: value 9"]
+```
+
+Every parent is ≤ its children — but notice the array itself is **not sorted** (9 sits after 12).
+The heap property is strictly parent-to-child; siblings and cousins are unordered.
+
 ## Watch it: insert with sift-up
 
 To insert, drop the new value at the **end** of the array (keeping the tree complete), then let
@@ -183,6 +197,25 @@ is cheap to evict), and for the **k smallest** you use a **max**-heap. Heaps als
 | build heap (heapify) | **O(n)** | not O(n log n) |
 | top-k (size-k heap) | **O(n log k)** | vs O(n log n) to sort all |
 | heap sort | **O(n log n)** | in place, not stable |
+
+## Recall
+
+```flashcards
+title: Heap operation costs
+cards:
+  - front: '`peek()` the min/max'
+    back: '**O(1)** — it is always `a[0]`.'
+  - front: '`offer(x)` (insert)'
+    back: '**O(log n)** — place at the end, sift **up** at most the tree height.'
+  - front: '`poll()` (remove min/max)'
+    back: '**O(log n)** — last element to the root, sift **down** toward the smaller child.'
+  - front: 'Build a heap from n arbitrary elements'
+    back: '**O(n)** heapify — sift-down all non-leaf nodes bottom-up. NOT O(n log n).'
+  - front: 'k largest elements of a stream'
+    back: '**Min-heap of size k** — O(n log k) time, O(k) space. Opposite polarity to what you are finding.'
+  - front: '`PriorityQueue.remove(Object)` in Java'
+    back: '**O(n)** — it linear-searches for the element first. Heaps have no fast lookup by value.'
+```
 
 ## Check yourself
 

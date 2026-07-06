@@ -18,15 +18,17 @@ interview starts here, and the "senior" answer is knowing *why* real systems eve
 flowchart LR
   subgraph V["Vertical — scale UP"]
     direction TB
-    S1["Server<br/>4 CPU / 16 GB"] --> S2["Server<br/>32 CPU / 256 GB"]
+    S1["4 CPU / 16 GB"] -->|"replace with bigger box"| S2["32 CPU / 256 GB"]
+    S2 -->|"replace again"| S3["96 CPU / 1 TB — ceiling"]
   end
   subgraph H["Horizontal — scale OUT"]
     direction TB
-    H1["Server"]
-    H2["Server"]
-    H3["Server"]
-    H4["Server"]
+    LB[Load Balancer] --> H1[Server 1]
+    LB --> H2[Server 2]
+    LB --> H3[Server 3]
+    LB --> HN["Server N — keep adding"]
   end
+  V -->|"at the ceiling or needing HA"| H
 ```
 
 - **Vertical (scale up):** replace the box with a beefier one — more CPU, RAM, faster disk.
@@ -72,6 +74,32 @@ maxed-out server is still one power supply, one kernel panic away from a full ou
 servers behind a load balancer survive losing one. "Scale out" is as much a reliability decision
 as a performance one.
 :::
+
+## Put numbers on the ceiling
+
+The cost argument is concrete, not hand-wavy:
+
+| Machine | Spec | Rough cloud cost |
+|--|--|--|
+| Commodity VM | 4 vCPU / 16 GB | ~$0.20/hr |
+| 2x the VM | 8 vCPU / 32 GB | ~$0.40/hr — linear so far |
+| Large box | 96 vCPU / 768 GB | ~$5/hr |
+| Biggest money can buy | ~448 vCPU / 24 TB RAM | ~$100+/hr — and there is **nothing bigger at any price** |
+
+At the low end doubling is roughly linear; near the top you pay a premium for exotic hardware, and past the top the option simply doesn't exist. Ten commodity VMs cost about the same as one 10x box **and** survive a node loss.
+
+**Real-world anchors to cite:** Stack Overflow famously served all of its traffic for years on a handful of very large SQL Server + IIS boxes — proof vertical goes further than people assume when the workload is cache-friendly. Google and Amazon went the other way: fleets of commodity machines where failure is expected and routed around. WhatsApp did both: few servers, but each tuned to hold ~2M concurrent connections.
+
+## What breaks first at 10x traffic
+
+The interviewer's favorite follow-up. Typical order of collapse for a single-box architecture:
+
+1. **CPU saturates** on the app tier → request queueing, p99 explodes long before p50 moves.
+2. **Database connections** run out (each app instance holds a pool; Postgres defaults to ~100 max connections).
+3. **Working set outgrows RAM** → the DB starts hitting disk, latency jumps ~100x (100 µs SSD vs ~100 ns RAM per access).
+4. Only then, usually, raw disk/network bandwidth.
+
+Scaling up resets these limits once; scaling out lets you keep resetting the app-tier limits — but pushes the problem down to the shared database, which is why the next topics (statelessness, then database scaling) exist.
 
 :::gotcha
 Horizontal scaling only works if requests don't depend on *which* node handles them. A server that

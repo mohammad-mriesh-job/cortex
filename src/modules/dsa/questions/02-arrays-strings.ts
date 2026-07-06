@@ -251,6 +251,319 @@ In Java, **\`String\` is immutable** — you cannot reassign its characters. Con
 The deciding factor: if the array can contain **negatives** (so a window's sum isn't monotonic as it grows), sliding window fails — use prefix sums with a hash map instead. Example: "subarray sum equals k" with negatives is a prefix-sum problem, not a window one.
 :::`,
   },
+  {
+    id: 'dsa-arr-kadane',
+    question: 'Find the maximum sum of a contiguous subarray (the array can contain negatives).',
+    difficulty: 'Medium',
+    category: 'Arrays & Strings',
+    tags: ['kadane', 'dynamic-programming', 'subarray'],
+    answer: `**Brute force** checks every subarray in O(n²). **Kadane's algorithm** does it in **O(n)** with one insight: the best subarray ending at \`i\` either **extends** the best subarray ending at \`i-1\`, or **starts fresh** at \`i\`.
+
+\`\`\`java
+int best = a[0], cur = a[0];
+for (int i = 1; i < n; i++) {
+  cur = Math.max(a[i], cur + a[i]);  // extend or restart
+  best = Math.max(best, cur);
+}
+return best;
+\`\`\`
+
+If the running sum \`cur\` ever goes negative it can only hurt what follows, so we drop it and restart. **O(n) time, O(1) space.**
+
+:::gotcha
+Initialize \`best\` to \`a[0]\` (or \`Integer.MIN_VALUE\`), **not 0** — an all-negative array like \`[-3,-1,-2]\` should return \`-1\`, and a 0-seed would wrongly return 0.
+:::
+
+The transferable pattern is a **1-D DP** where each state depends only on the previous — the essence of "best ending here."`,
+  },
+  {
+    id: 'dsa-arr-best-time-stock',
+    question: 'Given daily prices, find the maximum profit from one buy and one later sell.',
+    difficulty: 'Easy',
+    category: 'Arrays & Strings',
+    tags: ['arrays', 'one-pass', 'greedy'],
+    answer: `Track the **minimum price seen so far** and the **best profit** if you sold today. One pass:
+
+\`\`\`java
+int minPrice = Integer.MAX_VALUE, best = 0;
+for (int p : prices) {
+  minPrice = Math.min(minPrice, p);   // cheapest day to have bought
+  best = Math.max(best, p - minPrice); // profit if selling today
+}
+return best;
+\`\`\`
+
+The brute force compares every buy/sell pair in O(n²); tracking the running minimum collapses it to **O(n) time, O(1) space**. The trick — carry the best "buy" as you scan so each "sell" is answered in O(1) — is the same idea behind Kadane.
+
+:::note
+Return 0 when prices only fall (never buy). This is the single-transaction case; the multi-transaction variant is a greedy sum of every upward step.
+:::`,
+  },
+  {
+    id: 'dsa-arr-move-zeroes',
+    question: 'Move all zeroes in an array to the end while keeping the non-zero order, in-place.',
+    difficulty: 'Easy',
+    category: 'Arrays & Strings',
+    tags: ['two pointers', 'in-place', 'partition'],
+    answer: `Use a **slow write pointer** that marks where the next non-zero belongs. Scan with a fast pointer; every non-zero gets swapped/written forward, and zeroes fall to the back automatically.
+
+\`\`\`java
+int w = 0;                       // next slot for a non-zero
+for (int r = 0; r < n; r++)
+  if (a[r] != 0) {
+    int t = a[w]; a[w] = a[r]; a[r] = t;   // swap keeps order
+    w++;
+  }
+\`\`\`
+
+**O(n) time, O(1) space**, order-preserving. This **read/write two-pointer** (a.k.a. slow-fast partition) is the same template as "remove duplicates from a sorted array" and "remove element" — one pointer reads, one compacts.`,
+  },
+  {
+    id: 'dsa-arr-longest-common-prefix',
+    question: 'Find the longest common prefix among an array of strings.',
+    difficulty: 'Easy',
+    category: 'Arrays & Strings',
+    tags: ['strings', 'prefix', 'scan'],
+    answer: `**Vertical scanning:** compare character position 0 across all strings, then position 1, and so on — stop at the first mismatch or when any string ends.
+
+\`\`\`java
+String lcp(String[] strs) {
+  if (strs.length == 0) return "";
+  for (int i = 0; i < strs[0].length(); i++) {
+    char c = strs[0].charAt(i);
+    for (String s : strs)
+      if (i == s.length() || s.charAt(i) != c)
+        return strs[0].substring(0, i);
+  }
+  return strs[0];
+}
+\`\`\`
+
+**O(S)** where S is the total number of characters — you never scan past the shortest string or the first divergence. Edge cases to name: an **empty array** and an **empty string** in the set (LCP is "").`,
+  },
+  {
+    id: 'dsa-arr-container-most-water',
+    question: 'Given heights, find two lines that with the x-axis hold the most water.',
+    difficulty: 'Medium',
+    category: 'Arrays & Strings',
+    tags: ['two pointers', 'greedy', 'optimization'],
+    answer: `Area between lines \`l\` and \`r\` is \`min(h[l], h[r]) · (r - l)\`. **Brute force** tries all pairs in O(n²). The **two-pointer** method starts wide and moves inward in **O(n)**:
+
+\`\`\`java
+int l = 0, r = n - 1, best = 0;
+while (l < r) {
+  best = Math.max(best, Math.min(h[l], h[r]) * (r - l));
+  if (h[l] < h[r]) l++;   // move the SHORTER line inward
+  else             r--;
+}
+\`\`\`
+
+**Why move the shorter line?** The area is capped by the shorter line, and the width only shrinks — so keeping the shorter line can never improve the area, but replacing it might. Moving the taller one is provably wasted.
+
+:::senior
+The transferable idea: a **greedy two-pointer** where you can prove which pointer to advance because moving the other cannot beat the current best.
+:::`,
+  },
+  {
+    id: 'dsa-arr-3sum',
+    question: 'Find all unique triplets in an array that sum to zero.',
+    difficulty: 'Medium',
+    category: 'Arrays & Strings',
+    tags: ['two pointers', 'sorting', '3sum'],
+    answer: `**Sort**, then for each index \`i\` run a **two-pointer** search for pairs summing to \`-a[i]\` in the rest of the array. Brute force is O(n³); this is **O(n²)**.
+
+\`\`\`java
+Arrays.sort(a);
+for (int i = 0; i < n - 2; i++) {
+  if (i > 0 && a[i] == a[i-1]) continue;      // skip dup anchors
+  int l = i + 1, r = n - 1;
+  while (l < r) {
+    int s = a[i] + a[l] + a[r];
+    if (s == 0) {
+      res.add(List.of(a[i], a[l], a[r]));
+      while (l < r && a[l] == a[l+1]) l++;      // skip dup pairs
+      while (l < r && a[r] == a[r-1]) r--;
+      l++; r--;
+    } else if (s < 0) l++; else r--;
+  }
+}
+\`\`\`
+
+:::gotcha
+The hard part is **deduplication**: skip equal values for the anchor \`i\` *and* after recording a hit. Sorting is what enables both the two-pointer sweep and the dedup.
+:::`,
+  },
+  {
+    id: 'dsa-arr-majority-element',
+    question: 'Find the element that appears more than n/2 times, in O(1) space.',
+    difficulty: 'Medium',
+    category: 'Arrays & Strings',
+    tags: ['boyer-moore', 'voting', 'in-place'],
+    answer: `A hash-map count is O(n) time but O(n) space. **Boyer-Moore voting** does it in **O(n) time, O(1) space**: keep a candidate and a counter; matching votes increment it, differing votes cancel it out.
+
+\`\`\`java
+int cand = 0, count = 0;
+for (int x : a) {
+  if (count == 0) cand = x;        // adopt a new candidate
+  count += (x == cand) ? 1 : -1;   // vote for or against
+}
+return cand;   // guaranteed correct IF a majority exists
+\`\`\`
+
+**Why it works:** a true majority (> n/2) survives every pairwise cancellation because there are more of it than everything else combined.
+
+:::gotcha
+The invariant only holds when a majority is **guaranteed**. If it might not exist, add a **second pass** to verify \`cand\` actually occurs > n/2 times.
+:::`,
+  },
+  {
+    id: 'dsa-arr-rotate-array',
+    question: 'Rotate an array to the right by k steps, in-place with O(1) extra space.',
+    difficulty: 'Medium',
+    category: 'Arrays & Strings',
+    tags: ['arrays', 'reversal', 'in-place'],
+    answer: `The elegant trick is **three reversals**. Rotating right by \`k\` means the last \`k\` elements move to the front — which is exactly what "reverse all, then reverse each part" produces:
+
+\`\`\`java
+k %= n;                       // k can exceed n
+reverse(a, 0, n - 1);         // reverse the whole array
+reverse(a, 0, k - 1);         // reverse the first k
+reverse(a, k, n - 1);         // reverse the rest
+\`\`\`
+
+For \`[1,2,3,4,5]\`, k=2: reverse-all → \`[5,4,3,2,1]\`, then fix each block → \`[4,5,1,2,3]\`. **O(n) time, O(1) space.**
+
+:::gotcha
+Always take \`k %= n\` first — if \`k ≥ n\` the raw index math overflows the bounds and a rotation by \`n\` is a no-op, not a crash you want.
+:::`,
+  },
+  {
+    id: 'dsa-arr-merge-sorted-inplace',
+    question: 'Merge two sorted arrays into the first (which has trailing space) in-place.',
+    difficulty: 'Medium',
+    category: 'Arrays & Strings',
+    tags: ['two pointers', 'merge', 'in-place'],
+    answer: `Merging from the **front** would overwrite unread elements of \`a\`. The trick is to fill from the **back**, placing the largest remaining element into the last free slot:
+
+\`\`\`java
+int i = m - 1, j = n - 1, w = m + n - 1;  // write at the end
+while (j >= 0) {
+  if (i >= 0 && a[i] > b[j]) a[w--] = a[i--];
+  else                      a[w--] = b[j--];
+}
+\`\`\`
+
+Writing back-to-front guarantees the write pointer \`w\` is always **ahead of** the read pointer \`i\`, so nothing unread is clobbered. **O(m + n) time, O(1) space.**
+
+:::tip
+The loop can stop when \`j < 0\` — any leftover \`a\` elements are already in place. This "fill from the back to avoid overwrites" idea recurs in in-place array shifts.
+:::`,
+  },
+  {
+    id: 'dsa-arr-product-except-self',
+    question: 'Return an array where each element is the product of all others, without division.',
+    difficulty: 'Hard',
+    category: 'Arrays & Strings',
+    tags: ['prefix', 'suffix', 'arrays'],
+    answer: `Division would be O(n) but breaks on zeros. Instead multiply a **prefix product** (everything to the left) by a **suffix product** (everything to the right):
+
+\`\`\`java
+int[] res = new int[n];
+res[0] = 1;
+for (int i = 1; i < n; i++) res[i] = res[i-1] * a[i-1];  // prefixes
+int suffix = 1;
+for (int i = n - 1; i >= 0; i--) {
+  res[i] *= suffix;        // combine with running suffix
+  suffix *= a[i];
+}
+\`\`\`
+
+The first pass fills \`res[i]\` with the product of everything **left** of \`i\`; the second multiplies in everything **right** of \`i\` using a rolling variable. **O(n) time, O(1) extra space** (output array excluded).
+
+:::senior
+Handling zeros for free is the payoff of avoiding division — one zero makes every other product 0 and two zeros make all products 0, and the prefix/suffix method gets both cases right automatically.
+:::`,
+  },
+  {
+    id: 'dsa-arr-dutch-flag',
+    question: 'Sort an array of 0s, 1s, and 2s in a single pass (the Dutch National Flag problem).',
+    difficulty: 'Hard',
+    category: 'Arrays & Strings',
+    tags: ['three pointers', 'partition', 'invariant'],
+    answer: `Counting sort needs two passes. Dijkstra's **three-pointer** partition does it in **one pass, O(1) space**. Keep \`low\`, \`mid\`, \`high\` regions: \`[0, low)\` are 0s, \`[low, mid)\` are 1s, \`(high, n)\` are 2s, and \`[mid, high]\` is unexplored.
+
+\`\`\`java
+int low = 0, mid = 0, high = n - 1;
+while (mid <= high) {
+  if (a[mid] == 0)      { swap(a, low++, mid++); }
+  else if (a[mid] == 1) { mid++; }
+  else                  { swap(a, mid, high--); } // do NOT mid++
+}
+\`\`\`
+
+:::gotcha
+On a **2**, swap it to the back but **don't advance \`mid\`** — the element you just pulled from \`high\` is unexamined. On a **0**, advancing both \`low\` and \`mid\` is safe because whatever came from \`low\` is already known to be a 1.
+:::
+
+The transferable idea: **three-way partitioning**, which also fixes quicksort's all-equal-elements degradation.`,
+  },
+  {
+    id: 'dsa-arr-min-window-substring',
+    question: 'Find the smallest substring of s that contains all characters of t (with multiplicity).',
+    difficulty: 'Hard',
+    category: 'Arrays & Strings',
+    tags: ['sliding window', 'hashing', 'strings'],
+    answer: `A **variable sliding window** with a character-need count. **Expand** \`right\` until the window is valid (covers all of \`t\`), then **contract** \`left\` as far as possible while staying valid, recording the smallest such window.
+
+\`\`\`java
+int[] need = new int[128];
+for (char c : t.toCharArray()) need[c]++;
+int missing = t.length(), l = 0, start = 0, len = Integer.MAX_VALUE;
+for (int r = 0; r < s.length(); r++) {
+  if (need[s.charAt(r)]-- > 0) missing--;         // consumed a needed char
+  while (missing == 0) {                           // window is valid
+    if (r - l + 1 < len) { len = r - l + 1; start = l; }
+    if (++need[s.charAt(l++)] > 0) missing++;      // left char now missing
+  }
+}
+return len == Integer.MAX_VALUE ? "" : s.substring(start, start + len);
+\`\`\`
+
+**O(|s| + |t|)** — each pointer moves forward at most \`|s|\` times. The \`missing\` counter avoids re-scanning the map to check validity.
+
+:::senior
+The "expand to become valid, contract to become minimal" shape is the canonical **shrinkable-window** template — the same skeleton solves "longest substring with at most k distinct" by flipping the validity test.
+:::`,
+  },
+  {
+    id: 'dsa-arr-trapping-rain-water',
+    question: 'Given an elevation map, compute how much rainwater it can trap.',
+    difficulty: 'Hard',
+    category: 'Arrays & Strings',
+    tags: ['two pointers', 'arrays', 'prefix-max'],
+    answer: `Water above bar \`i\` is \`min(maxLeft, maxRight) − height[i]\`. The brute force recomputes both maxes per bar in O(n²); prefix-max arrays make it O(n) time/O(n) space; the **two-pointer** method reaches **O(n) time, O(1) space**.
+
+\`\`\`java
+int l = 0, r = n - 1, lMax = 0, rMax = 0, water = 0;
+while (l < r) {
+  if (h[l] < h[r]) {                 // shorter side bounds the water
+    lMax = Math.max(lMax, h[l]);
+    water += lMax - h[l];
+    l++;
+  } else {
+    rMax = Math.max(rMax, h[r]);
+    water += rMax - h[r];
+    r--;
+  }
+}
+\`\`\`
+
+**Why it works:** if \`h[l] < h[r]\`, then \`lMax\` is guaranteed to be the true limiting height for column \`l\` (the right side is taller), so we can commit its water without knowing the exact right max.
+
+:::senior
+This "advance the smaller side because it is the binding constraint" is the same greedy proof as container-with-most-water — recognizing it is the senior signal.
+:::`,
+  },
 ];
 
 export default questions;

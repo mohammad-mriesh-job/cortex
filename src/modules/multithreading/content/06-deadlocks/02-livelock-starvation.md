@@ -50,7 +50,20 @@ steps:
 ```
 
 In code, livelock famously appears in naive deadlock avoidance: two threads each grab one lock, notice
-they cannot get the second, **politely release and retry** — in lockstep, forever.
+they cannot get the second, **politely release and retry** — in lockstep, forever. The loop and its
+one-line exit:
+
+```mermaid
+flowchart TD
+  A["T1 holds lock A, T2 holds lock B — each wants the other"] --> B["Both tryLock the second lock and fail"]
+  B --> C["Both politely release their first lock"]
+  C --> D["Both retry at the same instant"]
+  D --> A
+  D -->|"randomized backoff desynchronizes them"| E["One thread retries first and takes both locks — progress"]
+```
+
+The retry logic is *correct* in isolation; the failure is **emergent symmetry** between two correct
+threads. That is why the fix is randomness, not more logic.
 
 ## Starvation: always last in line
 

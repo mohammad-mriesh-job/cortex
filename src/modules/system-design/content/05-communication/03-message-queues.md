@@ -54,6 +54,8 @@ Both are brokers, but they were built for different jobs. The core difference: R
 The interview one-liner: **RabbitMQ is a smart broker with dumb consumers; Kafka is a dumb broker (a log) with smart consumers.** RabbitMQ decides routing and deletes on ack. Kafka just appends to partitions and each consumer group tracks its own offset — which is exactly what makes **replay** and multiple independent readers of the same stream possible.
 :::
 
+Capacity numbers to anchor a design: one **Kafka partition** sustains **~10s of MB/s** (tens of thousands of small messages/sec) — you scale by adding partitions, and a modest cluster reaches **millions of messages/sec**. A single **RabbitMQ** node is comfortable around **~10–50k msgs/s**. Consumers set the real ceiling: max parallelism in Kafka = number of partitions in the topic, so pick the partition count for your *target* consumer throughput, not today's.
+
 ## Event-driven architecture
 
 Pub/sub scales into an **event-driven** style: services emit events about facts that happened (`PaymentCaptured`, `UserSignedUp`) and other services react. No service calls another directly, so you can add a new consumer (say, a fraud checker) **without touching the producer**. The trade-off is the usual async tax — eventual consistency and harder end-to-end tracing.
@@ -68,7 +70,7 @@ sequenceDiagram
   B->>C: deliver(msg)
   C->>C: process
   C->>B: ack
-  Note over B,C: If C crashes before ack, the broker<br/>redelivers → at-least-once. Consumer must be idempotent.
+  Note over B,C: If C crashes before ack, the broker redelivers — at-least-once.
 ```
 
 That redelivery is the crux of the next section.

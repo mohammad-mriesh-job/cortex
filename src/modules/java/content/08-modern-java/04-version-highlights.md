@@ -18,10 +18,10 @@ A subset of releases is designated **LTS**. The gap was three years (11 → 17) 
 
 ```mermaid
 flowchart LR
-    J8["Java 8 (2014)<br/>LTS"] --> J11["Java 11 (2018)<br/>LTS"]
-    J11 --> J17["Java 17 (2021)<br/>LTS"]
-    J17 --> J21["Java 21 (2023)<br/>LTS"]
-    J21 --> J25["Java 25 (2025)<br/>LTS"]
+    J8["Java 8 (2014) LTS"] --> J11["Java 11 (2018) LTS"]
+    J11 --> J17["Java 17 (2021) LTS"]
+    J17 --> J21["Java 21 (2023) LTS"]
+    J21 --> J25["Java 25 (2025) LTS"]
 ```
 
 ## Milestone features
@@ -70,6 +70,34 @@ A *feature* (non-LTS) release such as Java 19 or 23 stops receiving updates the 
 :::tip
 Language features are tied to the compiler, not just the libraries: records need 16+, sealed types 17+, pattern matching for switch 21+. Pass `--release N` to `javac` so it enforces exactly the language and API level you intend to ship.
 :::
+
+## Check yourself
+
+```quiz
+title: Java versions
+questions:
+  - q: 'Which release model do companies almost always run in production?'
+    options:
+      - text: 'LTS releases (8, 11, 17, 21, 25) — they get years of support'
+        correct: true
+      - 'The very latest feature release, whatever it is'
+      - 'Only even-numbered versions'
+    explain: 'Non-LTS feature releases lose updates the moment the next ships (~6 months) — too short for production. LTS releases get several years of security and bug-fix support, so realistic production choices are 8, 11, 17, 21, 25.'
+  - q: 'Which headline feature arrived in **Java 21**?'
+    options:
+      - text: 'Virtual threads (plus pattern matching for switch and sequenced collections)'
+        correct: true
+      - 'Lambdas and the Stream API'
+      - 'The module system (JPMS)'
+    explain: 'Java 21 (LTS) finalized virtual threads, pattern matching for switch, and sequenced collections. Lambdas/streams were Java 8; JPMS was Java 9.'
+  - q: 'Why do teams often leap straight from Java 8 to 17/21 rather than upgrading one release at a time?'
+    options:
+      - text: 'The pain is **strong encapsulation** and **removed modules** (JAXB, CORBA), not new syntax'
+        correct: true
+      - 'Each intermediate version deletes your source files'
+      - 'Because only every third release can compile older code'
+    explain: 'From Java 16/17 the JDK locks down internal `sun.*`/`jdk.internal.*` packages, and Java 11 removed the bundled Java EE/CORBA modules. Code relying on those breaks regardless of how many hops you take, so one big jump is often simplest.'
+```
 
 :::key
 - Since 2018 Java ships **every six months**; **LTS** lands every 2–3 years (8, 11, 17, 21, 25) and is what runs in production.

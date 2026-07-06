@@ -78,6 +78,15 @@ static int g() {
 
 **Why:** `finally` runs *after* the `try`/`catch` decides its outcome. A `return`/`throw`/`break` in `finally` replaces that outcome entirely — including discarding an in-flight exception. Mutating a local in `finally` doesn't change an already-evaluated return value.
 
+```mermaid
+flowchart TD
+    A["try block runs"] --> B["return X: the value X is latched"]
+    B --> C["finally block always runs"]
+    C --> D{"finally has return / throw / break?"}
+    D -->|yes| E["That outcome REPLACES try's — X and any pending exception discarded"]
+    D -->|no| F["The latched value X is returned"]
+```
+
 ### Pre/post-increment & evaluation order
 
 ```java

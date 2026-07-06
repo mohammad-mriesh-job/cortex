@@ -84,9 +84,9 @@ A client sends `POST /payments`, the response is lost to a timeout, the client r
 
 ```mermaid
 flowchart TD
-  R[POST /payments<br/>Idempotency-Key: abc-123] --> Q{Key seen<br/>before?}
-  Q -- No --> P[Process payment] --> S[Store key → result] --> R1[201 Created]
-  Q -- Yes --> C[Return stored result<br/>do NOT re-charge] --> R2[200 OK, same body]
+  R["POST /payments with Idempotency-Key: abc-123"] --> Q{"Key seen before?"}
+  Q -- No --> P[Process payment] --> S["Store key with result"] --> R1[201 Created]
+  Q -- Yes --> C["Return stored result — do NOT re-charge"] --> R2["200 OK, same body"]
 ```
 
 The key is client-generated (a UUID), stored server-side with its result and a TTL, and scoped to the operation. `GET`/`PUT`/`DELETE` don't need it — they're already idempotent.
@@ -102,6 +102,23 @@ You cannot ask every client to upgrade at once, so **breaking changes need a new
 | **Query param** | `GET /users?version=2` | Easy, but easy to forget |
 
 URI versioning wins in interviews for being explicit. Whatever you pick: **additive changes don't bump the version**; only breaking ones do.
+
+```flashcards
+title: Status codes — instant recall
+cards:
+  - front: '200 vs 201 vs 202 vs 204'
+    back: '**200** success+body · **201** created (+`Location`) · **202** accepted, processing async · **204** success, no body (DELETE).'
+  - front: '401 vs 403'
+    back: '**401** = not authenticated ("who are you?") · **403** = authenticated but not allowed ("you can''t do this").'
+  - front: '409 Conflict'
+    back: 'State clash — duplicate create, optimistic-lock version mismatch. The client can resolve and retry.'
+  - front: '429 Too Many Requests'
+    back: 'Rate limited. Send **`Retry-After`** so well-behaved clients back off.'
+  - front: '500 vs 503'
+    back: '**500** = server bug (don''t blind-retry) · **503** = temporarily overloaded/down (retry with backoff).'
+  - front: 'Which methods are idempotent?'
+    back: '`GET`, `PUT`, `DELETE` (and `HEAD`). **Not** `POST` — hence idempotency keys. `PATCH` usually not.'
+```
 
 ## Check yourself
 

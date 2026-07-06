@@ -52,9 +52,9 @@ Loaders form a parent chain (delegation links, *not* subclassing). Since Java 9 
 
 ```mermaid
 flowchart TD
-    Boot["Bootstrap ClassLoader<br/>(java.base: String, Object...)"] --> Plat["Platform ClassLoader<br/>(java.sql, java.xml...)"]
-    Plat --> App["Application ClassLoader<br/>(your classpath / module path)"]
-    App --> Custom["Custom ClassLoader(s)<br/>(plugins, web apps)"]
+    Boot["Bootstrap ClassLoader (java.base: String, Object)"] --> Plat["Platform ClassLoader (java.sql, java.xml)"]
+    Plat --> App["Application ClassLoader (your classpath / module path)"]
+    App --> Custom["Custom ClassLoaders (plugins, web apps)"]
 ```
 
 | Loader | Implemented in | Loads |
@@ -92,9 +92,61 @@ class ByteClassLoader extends ClassLoader {
 
 This powers app servers (isolating each web app), OSGi, hot-reload tooling, and bytecode-instrumentation agents.
 
+## ClassNotFoundException vs NoClassDefFoundError
+
+The classic interview pairing — both mean "class missing", but at different moments and with different severities:
+
+| | `ClassNotFoundException` | `NoClassDefFoundError` |
+|---|---|---|
+| Kind | **checked exception** | **Error** (subclass of `LinkageError`) |
+| When | an *explicit* dynamic load fails: `Class.forName`, `loadClass` | a class that was **present at compile time** is missing (or failed to initialize) at runtime |
+| Typical cause | wrong name/classpath in reflective code | dependency jar absent at runtime, or a static initializer threw earlier |
+| Recoverable? | often — fall back, try another driver | rarely — the deployment itself is broken |
+
+The nastiest variant: if a static initializer throws, the JVM records the class as failed with `ExceptionInInitializerError`, and every *later* use of the class reports `NoClassDefFoundError: Could not initialize class X` — the original root cause appears only once, in an earlier log line.
+
 :::senior
 A class's identity is **(fully-qualified name, defining classloader)** — its *runtime package*. The same `.class` loaded by two different loaders yields **two incompatible types**, producing the infamous `ClassCastException: Foo cannot be cast to Foo`. This is also how a `static` field can appear to "leak": redeploying a web app creates a new loader, and if a thread (or a JDK cache) still references the old loader, the entire old class graph can't be unloaded — a classic **`OutOfMemoryError: Metaspace`** leak.
 :::
+
+## Check yourself
+
+```quiz
+title: 'Class loading'
+questions:
+  - q: 'During which phase does `static int x = 5;` actually become 5?'
+    options:
+      - 'Preparation — statics are allocated and assigned there.'
+      - text: '**Initialization** — preparation only zeroes the slot (`x = 0`); the source-code assignment and `static {}` blocks run in the initialization phase, on first active use.'
+        correct: true
+      - 'Loading — values are read straight from the .class file.'
+      - 'Resolution.'
+    explain: 'Preparation sets defaults (0/false/null); initialization runs the real initializers in textual order, exactly once, under the per-class init lock. Between those phases, code could observe `x == 0`.'
+  - q: 'Why does a request for `java.lang.String` never load your rogue `java/lang/String.class` from the classpath?'
+    options:
+      - 'The JVM hashes core classes and compares signatures.'
+      - text: '**Parent delegation**: every loader asks its parent first, so the request reaches the bootstrap loader, which finds the real String in java.base before your classpath is ever consulted.'
+        correct: true
+      - 'The verifier rejects duplicate class names.'
+      - 'String is compiled into the JVM binary.'
+    explain: 'Delegation-first ordering means trusted ancestors always win for classes they know. (The JVM additionally forbids user-defined classes in the `java.*` package as a second line of defence.)'
+  - q: 'The same `Plugin.class` bytes are loaded by two different classloaders. `pluginA instanceof Plugin` (from the other loader) is...'
+    options:
+      - 'true — same bytes, same class.'
+      - text: 'false — runtime identity is (class name, **defining loader**); two loaders yield two distinct, cast-incompatible types.'
+        correct: true
+      - 'true, but only if both loaders share a parent.'
+      - 'a compile error.'
+    explain: 'This is the root of the infamous `ClassCastException: Foo cannot be cast to Foo` in app servers and plugin systems. Share the interface via a common parent loader and load only implementations in child loaders.'
+  - q: 'Your code calls `Class.forName("com.x.Driver")` and it worked yesterday; today the jar is missing from the runtime classpath. What is thrown?'
+    options:
+      - '`NoClassDefFoundError` — the class was there at compile time.'
+      - text: '`ClassNotFoundException` — explicit dynamic loading by name throws the checked exception; `NoClassDefFoundError` is for classes the compiled code references implicitly.'
+        correct: true
+      - '`ExceptionInInitializerError`.'
+      - '`UnsatisfiedLinkError`.'
+    explain: 'Rule of thumb: *you* asked by string → `ClassNotFoundException` (checked, often recoverable). *Compiled references* broke → `NoClassDefFoundError` (an Error: the deployment is bad). A static-init failure also resurfaces as `NoClassDefFoundError: Could not initialize class`.'
+```
 
 :::key
 - A type goes through **loading → linking (verify, prepare, resolve) → initialization**; static blocks/initializers run in the **initialization** phase, once, thread-safely.

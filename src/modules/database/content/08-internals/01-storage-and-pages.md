@@ -16,10 +16,10 @@ rows. Let's *see* that hierarchy, then zoom inside one page.
 
 ```mermaid
 flowchart LR
-  T["Table<br/>customers"] --> HF["Heap file<br/>(1 GB segments)"]
-  HF --> P0["Page 0<br/>8 KB"]
-  HF --> P1["Page 1<br/>8 KB"]
-  HF --> PN["Page N …"]
+  T["Table: customers"] --> HF["Heap file (1 GB segments)"]
+  HF --> P0["Page 0 — 8 KB"]
+  HF --> P1["Page 1 — 8 KB"]
+  HF --> PN["Page N ..."]
   P0 --> R0["tuple"]
   P0 --> R1["tuple"]
   P0 --> R2["tuple"]
@@ -41,10 +41,10 @@ middle. Line pointers give each row a stable slot number even when tuples move.
 flowchart TB
   subgraph PAGE["One 8 KB heap page"]
     direction TB
-    HDR["① Page header (24 B)<br/>page LSN · checksum · free-space pointers"]
-    SLOTS["② Line-pointer array →→→<br/>slot0 · slot1 · slot2 … (each holds a tuple's offset + length)"]
-    FREE["③ Free space (grows and shrinks here)"]
-    T2["④ Tuple 2"]
+    HDR["1. Page header, 24 B — LSN, checksum, free-space pointers"]
+    SLOTS["2. Line-pointer array — slot0, slot1, slot2 ... (each holds a tuple offset + length)"]
+    FREE["3. Free space (grows and shrinks here)"]
+    T2["4. Tuple 2"]
     T1["Tuple 1"]
     T0["Tuple 0 (packed from the end upward)"]
     HDR --- SLOTS --- FREE --- T2 --- T1 --- T0
@@ -125,7 +125,7 @@ flowchart TD
   A -->|no| C["Compress the large attributes"]
   C --> D{"Still > 2 KB?"}
   D -->|no| INLINE2["Keep compressed, inline"]
-  D -->|yes| OOL["Move value to the TOAST table;<br/>leave an 18 B pointer in the row"]
+  D -->|yes| OOL["Move value to the TOAST table — leave an 18 B pointer in the row"]
 ```
 
 ````tabs

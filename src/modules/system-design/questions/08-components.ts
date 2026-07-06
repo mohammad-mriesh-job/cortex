@@ -214,6 +214,219 @@ Whichever layer, run the balancer **redundantly** (active-active or active-passi
 The trick: **daily ops ÷ 100,000 ≈ QPS**, **× 2–3 for peak**. Round hard (86,400 ≈ 10⁵) and always convert each number into an **architectural decision** — the numbers exist to justify the design.
 :::`,
   },
+  {
+    id: 'sd-comp-dns-resolution',
+    question: 'Walk through what happens when a DNS name is resolved. Why is it a hierarchy?',
+    difficulty: 'Medium',
+    category: 'Core Components',
+    tags: ['dns', 'networking', 'ttl', 'caching'],
+    answer: `Resolution walks a **cache hierarchy**, then the DNS tree:
+
+1. **Check caches** — browser, then OS, then the **recursive resolver** (your ISP's, or 8.8.8.8). A hit returns immediately.
+2. On a miss the resolver queries top-down: a **root** server returns the \`.com\` **TLD** server → the TLD returns the **authoritative** name server for \`example.com\` → the authoritative server returns the **A/AAAA** record (the IP).
+3. Each answer is cached for its **TTL**.
+
+It's hierarchical so no single server holds the whole internet's names, and each level **delegates** authority — the 13 logical root addresses (anycast to thousands of instances) only know TLDs, not individual hosts.
+
+| Record | Purpose |
+|--|--|
+| A / AAAA | name → IPv4 / IPv6 |
+| CNAME | alias → another name |
+| NS | delegate a zone |
+
+:::gotcha
+TTL is the availability/agility trade-off: a **long TTL** (hours) means fewer lookups but *slow propagation* — a failover or IP change can take the full TTL to reach clients. Drop TTLs to ~60 s **before** a planned migration.
+:::`,
+  },
+  {
+    id: 'sd-comp-anycast',
+    question: 'What is anycast and why do CDNs and DNS rely on it?',
+    difficulty: 'Easy',
+    category: 'Core Components',
+    tags: ['anycast', 'networking', 'cdn', 'bgp'],
+    answer: `Anycast advertises the **same IP from many locations** at once; the internet's routing (BGP) then delivers each client to the **topologically nearest** instance automatically. One address, many servers.
+
+Why it's everywhere at the edge:
+
+- **Latency** — users reach the closest point of presence with no application logic.
+- **Availability** — if a location dies, BGP reroutes to the next-nearest; no DNS change needed.
+- **DDoS absorption** — attack traffic spreads across many sites instead of hammering one.
+
+The 13 root DNS servers, public resolvers (\`1.1.1.1\`, \`8.8.8.8\`), and CDN edges (Cloudflare, Fastly) all run on anycast.
+
+:::note
+Contrast with **unicast** (one IP → one host) and **DNS geo-routing** (returns *different* IPs per region). Anycast keeps a **single** IP and lets the network do the steering.
+:::`,
+  },
+  {
+    id: 'sd-comp-object-storage',
+    question: 'How does object storage like S3 differ from a filesystem, and what consistency does it give?',
+    difficulty: 'Easy',
+    category: 'Core Components',
+    tags: ['object-storage', 's3', 'consistency', 'durability'],
+    answer: `Object storage is a **flat key → blob map exposed over HTTP**, not a hierarchical filesystem. You \`PUT\`/\`GET\` an object by key into a **bucket**; the slashes in a path are just a naming convention — there are **no real directories, no partial in-place edits, no file handles**. Each object carries metadata and is addressed by a URL.
+
+- It scales near-infinitely and cheaply *because* it's flat and immutable-per-object — the durable store behind data lakes, backups, and media (fronted by a CDN).
+- **Durability** is extreme: S3 targets **11 nines** (99.999999999%) via replication/erasure coding across AZs.
+- **Consistency**: since Dec 2020 S3 gives **strong read-after-write** — a \`GET\` right after a \`PUT\` returns the new object (it was eventually consistent before).
+
+:::gotcha
+It is **not** a filesystem: you can't append to or edit part of an object (you replace the whole key), and \`LIST\` is far slower than a keyed \`GET\`. Don't use it for low-latency random-access transactional data — that's what databases are for.
+:::`,
+  },
+  {
+    id: 'sd-comp-geospatial-index',
+    question: 'How do you index locations to answer "what is near me?" Compare geohash, quadtree, and H3.',
+    difficulty: 'Hard',
+    category: 'Core Components',
+    tags: ['geospatial', 'geohash', 'quadtree', 'h3'],
+    answer: `A plain \`(lat, lng)\` column can't do "within radius" without scanning, so you map 2-D space onto an indexable key or tree:
+
+- **Geohash** — interleave lat/lng bits into a base-32 string; a shared **prefix ≈ proximity**, so it's just a string range in any B-tree or Redis. Simple and shardable. Weakness: cells straddling a boundary can be far apart in string space, so you query the cell **plus its 8 neighbors**. Powers **Redis GEO**.
+- **Quadtree** — recursively split space into 4 quadrants, subdividing **only dense regions**. Adapts to skew (dense cities vs empty ocean) but is an in-memory tree that must rebalance as points move.
+- **H3 (Uber) / S2 (Google)** — tile the globe into **hexagons** (H3) or spherical cells (S2). Hexagons give **6 equidistant neighbors** (no corner ambiguity), which is why Uber uses H3 for supply/demand and surge.
+
+:::senior
+Choose by workload: **geohash** for a dead-simple key in an existing store, **quadtree** for adaptive density in memory, **H3/S2** when uniform cells and clean neighbor math matter (ride matching, coverage analytics).
+:::`,
+  },
+  {
+    id: 'sd-comp-push-notifications',
+    question: 'How does mobile push notification delivery actually work, and what is the hard part?',
+    difficulty: 'Medium',
+    category: 'Core Components',
+    tags: ['push-notifications', 'apns', 'fcm', 'mobile'],
+    answer: `You never connect to phones directly — you hand the message to the **platform gateway** that owns the persistent connection to each device: **APNs** (Apple) and **FCM** (Google/Android). Flow: the app registers, the OS returns a **device token**, your server stores \`token ↔ user\`, and to notify you POST to APNs/FCM with the token; they deliver (or queue while offline).
+
+The hard part is **token lifecycle**: tokens **rotate** (reinstall, OS update, restore), so you must refresh the token on every launch and prune dead ones — APNs/FCM report a token as invalid, and you must delete it or you waste sends and damage your sender reputation.
+
+:::gotcha
+Push is **best-effort, unordered, not guaranteed** — treat it as a *hint*. For anything reliable (a payment receipt), the source of truth is your server; the client should still **fetch/sync on open** rather than trust that the notification arrived.
+:::`,
+  },
+  {
+    id: 'sd-comp-payment-ledger',
+    question: 'What are the core building blocks of a payment system, and how do you avoid losing or double-counting money?',
+    difficulty: 'Hard',
+    category: 'Core Components',
+    tags: ['payments', 'ledger', 'idempotency', 'reconciliation'],
+    answer: `Three pillars:
+
+1. **Idempotency keys** — the client sends a unique key per payment intent; the server executes **once** and returns the stored result on retries, so a lost response never double-charges.
+2. **Double-entry ledger** — every movement is recorded as balanced **debits and credits** whose sum is zero; balances are *derived* from immutable, **append-only** entries, never updated in place. This makes every cent auditable and self-checking.
+3. **Reconciliation** — periodically compare your ledger against the processor's/bank's report (and internal accounts against each other); mismatches are **flagged, not silently corrected**.
+
+Money demands **CP** (strong consistency) — an ACID store (Postgres) for the ledger, not eventual consistency.
+
+:::senior
+Model each payment as a **state machine** (created → authorized → captured → settled/failed), each transition idempotent and persisted **before** side effects. And never represent money as a float — use **integer minor units (cents)** or a decimal type to avoid rounding drift.
+:::`,
+  },
+  {
+    id: 'sd-comp-sessions-vs-jwt',
+    question: 'Server sessions vs JWTs for auth — what is the real trade-off?',
+    difficulty: 'Hard',
+    category: 'Core Components',
+    tags: ['authentication', 'jwt', 'sessions', 'revocation'],
+    answer: `- **Server sessions** — on login, store session state server-side (Redis) and give the client an **opaque session id** cookie. Every request looks it up. Stateful, but **revocation is instant** (delete the row) and the cookie leaks nothing.
+- **JWT** — a **signed, self-contained** token carrying claims (user id, roles, expiry). The server verifies the signature with **no lookup** → stateless, scales horizontally, travels well across services.
+
+The catch is **revocation**: a JWT is valid until it expires, so you can't easily kill one mid-life (logout, a banned user) without re-adding the very server-side state (a denylist / token-version check) you adopted JWT to avoid.
+
+| | Session | JWT |
+|--|--|--|
+| State | server lookup per request | stateless |
+| Revoke | instant | hard (until expiry) |
+| Best for | monolith, instant logout | microservices, short tokens |
+
+:::senior
+Production usually does **both**: short-lived **access JWTs** (5–15 min — no revocation needed because they expire fast) plus a long-lived **refresh token** stored server-side that *can* be revoked. Stateless verification on the hot path, and a real kill switch.
+:::`,
+  },
+  {
+    id: 'sd-comp-oauth-sso',
+    question: 'Explain OAuth 2.0 and how it differs from OpenID Connect and SSO.',
+    difficulty: 'Medium',
+    category: 'Core Components',
+    tags: ['oauth', 'oidc', 'sso', 'authorization'],
+    answer: `**OAuth 2.0 is delegated *authorization*** — it lets an app act on a resource on your behalf **without your password**. "Let this app read my Google Contacts": you authenticate at Google, and Google issues the app an **access token** scoped to contacts.
+
+- The **Authorization Code flow** (+ **PKCE** for mobile/SPA) is standard: the app redirects to the provider, the user consents, the provider returns a short **code**, and the app exchanges it **server-side** for tokens — tokens never sit in the browser URL.
+- **OpenID Connect (OIDC)** layers **authentication** on top of OAuth: it adds an **ID token** (a JWT proving *who* the user is). OAuth = authorization; OIDC = authentication.
+- **SSO** lets one login unlock many apps; it's built on OIDC/SAML against a central **identity provider** (Okta, Azure AD).
+
+:::gotcha
+OAuth alone answers "what can this app *do*," not "*who* is the user." Using a raw OAuth access token as proof of identity is a classic security bug — use **OIDC's ID token** for login.
+:::`,
+  },
+  {
+    id: 'sd-comp-file-upload',
+    question: 'How do you handle large file uploads reliably at scale?',
+    difficulty: 'Medium',
+    category: 'Core Components',
+    tags: ['file-upload', 'presigned-url', 'multipart', 'resumable'],
+    answer: `Don't stream bytes **through** your app servers — that ties up request threads and memory. Instead:
+
+1. **Presigned URL** — the client asks your API for a short-lived signed URL, then uploads **directly to object storage** (S3); your servers only handle metadata. Offloads bandwidth entirely.
+2. **Multipart upload** — split a large file into parts (e.g. 5–100 MB), upload them **in parallel**, and let the store assemble them. Boosts throughput and lets a single failed part retry alone.
+3. **Resumable** — track which chunks succeeded (by offset/etag) so a dropped connection resumes from the **last good chunk** instead of restarting a multi-GB upload.
+
+Validate with a client-supplied **checksum** (the store verifies each part's etag) and enforce size/type limits in the presign step.
+
+:::key
+Same shape as media pipelines: **client → object store directly via a presigned URL**, app server handles only metadata plus an **async post-processing job** (virus scan, thumbnail, transcode) triggered on upload completion.
+:::`,
+  },
+  {
+    id: 'sd-comp-task-scheduler',
+    question: 'How do you build a reliable job scheduler that runs tasks at a specific time, at scale?',
+    difficulty: 'Hard',
+    category: 'Core Components',
+    tags: ['scheduler', 'cron', 'delay-queue', 'distributed'],
+    answer: `A single-box \`cron\` doesn't survive the box dying and can't scale, so:
+
+- Store jobs durably with a \`next_run_at\` timestamp; **dispatcher** nodes poll for due jobs (\`WHERE next_run_at <= now\`) and enqueue them.
+- A **distributed lock / leader** (ZooKeeper/etcd or a DB row lock) or **sharding the job space by id** ensures a job isn't picked up by two dispatchers at once.
+- **Delay queues** for "run in N minutes": a queue with per-message delay (SQS delay, RabbitMQ TTL+DLX) or a **Redis sorted set** scored by run-time (\`ZADD\`, then \`ZRANGEBYSCORE now\`).
+
+Guarantee **at-least-once** and make handlers **idempotent** — a crash between "run" and "mark done" re-runs the job.
+
+:::senior
+Two hard parts interviewers probe: (1) **precision at scale** — you can't scan billions of rows every second, so bucket jobs into time windows (a **timing wheel** / hierarchical buckets); (2) **thundering herd** when many jobs fire at the same instant (a midnight cron) — add **jitter** and rate-limit dispatch.
+:::`,
+  },
+  {
+    id: 'sd-comp-redis-cluster',
+    question: 'How does Redis scale beyond one node, and what do you give up?',
+    difficulty: 'Medium',
+    category: 'Core Components',
+    tags: ['redis', 'sharding', 'cluster', 'replication'],
+    answer: `One Redis instance is single-threaded and memory-bound (~**100k ops/s** on one core, capped by RAM). To grow:
+
+- **Replication** — a primary with read **replicas** scales reads and enables failover (**Sentinel** promotes a replica if the primary dies). Writes still funnel to one primary.
+- **Redis Cluster** — shards the keyspace across primaries using **16,384 hash slots**; a key's slot = \`CRC16(key) mod 16384\`, and each primary owns a slot range (with its own replicas). This scales **writes and memory horizontally**, and slots migrate to rebalance or add nodes.
+
+The catch: a multi-key op (\`MGET\`, transactions, Lua) needs **all keys in the same slot** or it errors. You force that with **hash tags** — \`{user123}:profile\` and \`{user123}:cart\` hash on just the braces, landing in one slot.
+
+:::gotcha
+Cluster is cross-slot-hostile: design keys so related data shares a hash tag, or you lose atomic multi-key ops. And failover is still **eventually consistent** — a write acked by a primary that dies before replicating can be **lost**.
+:::`,
+  },
+  {
+    id: 'sd-comp-search-sharding',
+    question: 'How does a search cluster like Elasticsearch scale to billions of documents?',
+    difficulty: 'Medium',
+    category: 'Core Components',
+    tags: ['elasticsearch', 'sharding', 'replicas', 'search'],
+    answer: `The index is split into **shards** — each shard is a self-contained Lucene inverted index holding a subset of documents. Shards spread across nodes so storage and query load parallelize.
+
+- **Sharding** — a document routes to a shard by \`hash(routing_key) mod primary_shards\` (default routing key: the doc id). A query is **scatter-gather**: the coordinator fans it to every shard, each returns its top-k, and the coordinator merges them.
+- **Replicas** — each primary shard has replica copies on other nodes for read throughput and failover; a replica can serve searches.
+
+:::gotcha
+**Primary shard count is fixed at index creation** — changing it means a full **reindex**, because the routing hash depends on the shard count. Capacity-plan shards up front (or use rollover indices + aliases). Too few shards → hotspots; too many tiny shards → per-shard overhead dominates. Aim for shards in the **tens-of-GB** range.
+:::`,
+  },
 ];
 
 export default questions;

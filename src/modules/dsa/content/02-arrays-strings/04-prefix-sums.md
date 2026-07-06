@@ -106,6 +106,33 @@ lets a subarray starting at index 0 be counted. Forgetting it silently undercoun
 off-by-one that passes small tests and fails the edge cases.
 :::
 
+## Which prefix tool?
+
+The family has four members; interviews mostly test the first two, but naming the others is an
+easy senior signal:
+
+```mermaid
+flowchart TD
+  Q["Repeated range work on an array"] --> T{"What is being asked?"}
+  T -->|"many range-sum queries, static array"| PS["1D prefix: pre[j+1] - pre[i]"]
+  T -->|"count subarrays with sum k"| H["running prefix + hash map of counts"]
+  T -->|"rectangle sums in a 2D grid"| P2["2D prefix, the integral image"]
+  T -->|"many range UPDATES, read at the end"| DA["difference array, prefix once at the end"]
+```
+
+The **difference array** is the inverse trick: to add `v` to every element of `a[i..j]`, do
+`diff[i] += v; diff[j + 1] -= v` — O(1) per update — then one prefix pass materializes all
+updates at once. Classic uses: flight bookings, meeting-room load, "car pooling".
+
+```java
+int[] diff = new int[n + 1];
+for (int[] u : updates) {          // u = {i, j, v}
+    diff[u[0]] += u[2];
+    diff[u[1] + 1] -= u[2];        // cancel after the range ends
+}
+for (int i = 1; i < n; i++) diff[i] += diff[i - 1];  // materialize
+```
+
 ## Check yourself
 
 ```quiz

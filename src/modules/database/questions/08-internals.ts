@@ -224,6 +224,246 @@ SELECT pg_column_size(profile_json) FROM users ORDER BY 1 DESC LIMIT 3;
 Reading a TOASTed column costs an **extra fetch** from the TOAST table. A \`SELECT *\` that hauls a big \`jsonb\` you don't need can be dramatically slower than selecting only the columns you use.
 :::`,
   },
+  {
+    id: 'db-int-bplus-vs-btree',
+    question: 'What is the difference between a B-tree and a B+tree, and why do databases use B+trees?',
+    difficulty: 'Easy',
+    category: 'Internals',
+    tags: ['b-tree', 'b-plus-tree', 'index', 'storage'],
+    answer: `In a **B-tree**, keys and their data pointers live in **every** node. In a **B+tree**, internal nodes hold **only keys** to guide the search; **all data pointers live in the leaves**, and the leaves are **linked** in sorted order.
+
+Why databases prefer B+trees:
+
+- **Higher fanout** — internal nodes carry no payload, so more keys fit per page → shallower tree → fewer disk reads.
+- **Fast range scans** — follow the linked leaves sideways instead of re-walking the tree.
+- **Uniform lookups** — every search ends at a leaf, so depth (and cost) is predictable.
+
+\`\`\`text
+B+tree:  [internal: keys only]
+             |        |
+          [leaf k+ptr] <-> [leaf] <-> [leaf]   (linked, sorted)
+\`\`\`
+
+:::key
+Nearly every relational index is a **B+tree** — the data-in-leaves, linked-leaf design is exactly what range and \`ORDER BY\` queries need.
+:::`,
+  },
+  {
+    id: 'db-int-heap-vs-clustered',
+    question: 'What is the difference between heap-organized and clustered (index-organized) table storage?',
+    difficulty: 'Medium',
+    category: 'Internals',
+    tags: ['heap', 'clustered-index', 'storage', 'innodb'],
+    answer: `It is how the **table's rows** are physically stored:
+
+- **Heap** (PostgreSQL; SQL Server without a clustered index) — rows sit in an unordered heap file. **Every** index is secondary and points to a physical location (\`ctid\`/RID); the PK is just another secondary index.
+- **Clustered / index-organized** (InnoDB, SQL Server clustered index, Oracle IOT) — the table **is** a B+tree keyed by the clustering key (usually the PK); rows live **in the leaves** in key order. There is no separate heap.
+
+Consequences of clustering: a PK lookup needs **no** extra hop and PK range scans are sequential — but **secondary indexes store the PK value** and need a second lookup, and a wide/random PK bloats every secondary index.
+
+:::gotcha
+This is why InnoDB wants a **small, monotonic** primary key: it is duplicated inside every secondary index, and a random PK (like a UUIDv4) causes leaf **page splits** on insert. Heap tables don't share this sensitivity.
+:::`,
+  },
+  {
+    id: 'db-int-lsm-tree',
+    question: 'How does an LSM-tree store data, and why is it write-optimized?',
+    difficulty: 'Hard',
+    category: 'Internals',
+    tags: ['lsm-tree', 'storage-engine', 'compaction', 'sstable'],
+    answer: `A **Log-Structured Merge tree** turns random writes into sequential ones:
+
+1. Writes go to an in-memory sorted structure (**memtable**) plus an append-only **WAL** for durability.
+2. When the memtable fills, it is flushed to disk as an immutable, sorted **SSTable** — a purely sequential write, never an in-place update.
+3. Background **compaction** merges SSTables, dropping overwritten keys and **tombstones** (deletes are markers, not in-place removals).
+
+\`\`\`text
+write -> memtable (+WAL) --flush--> SSTable L0 --compact--> SSTable L1 -> ...
+\`\`\`
+
+Writes are fast because they only append to memory and a sequential log — no random page update. Used by RocksDB, Cassandra, LevelDB, and MyRocks.
+
+:::senior
+The cost is **read** and **space** amplification: a read may probe the memtable plus several SSTables, and compaction rewrites data repeatedly. Bloom filters (skip SSTables) and leveled compaction are the standard mitigations.
+:::`,
+  },
+  {
+    id: 'db-int-lsm-vs-btree',
+    question: 'Compare LSM-trees and B-trees in terms of read, write, and space amplification.',
+    difficulty: 'Hard',
+    category: 'Internals',
+    tags: ['lsm-tree', 'b-tree', 'amplification', 'trade-offs'],
+    answer: `Two storage philosophies with opposite trade-offs:
+
+| | B-tree | LSM-tree |
+|---|---|---|
+| Writes | in-place page update — **random** I/O | append memtable, **sequential** SSTable flush |
+| Write amplification | rewrites a whole page per change | higher (compaction rewrites), but sequential |
+| Reads | one tree traversal, predictable | may probe memtable + many SSTables (bloom filters help) |
+| Space | free-space slack, fragmentation | tombstones + un-compacted overwrites |
+| Best for | read-heavy, range scans, OLTP | write-heavy, high-ingest, SSD-friendly |
+
+- **B-tree** — read-optimized and mature; each write does a random page update.
+- **LSM** — write-optimized (sequential, kind to SSDs), but reads and compaction cost more.
+
+:::senior
+"Write amplification" differs by design: a B-tree rewrites a full page for a one-row change; an LSM rewrites the same data several times over successive compactions. Choose LSM for ingest-heavy/time-series, B-tree for balanced OLTP with range queries.
+:::`,
+  },
+  {
+    id: 'db-int-bloom-filter',
+    question: 'How do bloom filters speed up reads in an LSM-tree?',
+    difficulty: 'Medium',
+    category: 'Internals',
+    tags: ['bloom-filter', 'lsm-tree', 'reads', 'probabilistic'],
+    answer: `A read may have to check many SSTables to locate a key. A **bloom filter** is a compact probabilistic bitset per SSTable that answers "is key X **possibly** in here?" cheaply, so the engine can **skip** SSTables that definitely lack the key.
+
+- **No false negatives** — a "not present" answer is always correct, so skipping is safe.
+- **Tunable false positives** — it may say "maybe" for an absent key; you then check that SSTable and miss. More bits per key → fewer false positives.
+
+\`\`\`text
+GET key -> bloom says "no" for SSTables 1,2 -> skip -> read only SSTable 3
+\`\`\`
+
+This converts a lookup from "scan every SSTable" into "check the one or two that might match" — a huge I/O saving, especially for absent or rare keys.
+
+:::gotcha
+Bloom filters accelerate **point lookups**, not **range scans** (a range has no single key to test). And you cannot delete from a plain bloom filter, only rebuild it.
+:::`,
+  },
+  {
+    id: 'db-int-autovacuum',
+    question: 'What does VACUUM do in Postgres, and what is transaction-ID wraparound?',
+    difficulty: 'Medium',
+    category: 'Internals',
+    tags: ['vacuum', 'autovacuum', 'wraparound', 'mvcc', 'postgres'],
+    answer: `MVCC leaves **dead tuples** (old row versions) behind. **VACUUM** reclaims their space for reuse (plain \`VACUUM\`) or returns it to the OS (\`VACUUM FULL\`, which rewrites and **locks** the table). **Autovacuum** triggers it when a table's dead-tuple ratio crosses a threshold, and refreshes planner statistics.
+
+Its second, critical job is **freezing** to prevent **transaction-ID wraparound**: XIDs are 32-bit and eventually wrap, so VACUUM stamps old rows "frozen" (always visible) to let the counter advance safely. If autovacuum falls behind — often blocked by a long transaction — Postgres nears wraparound and will ultimately **force a shutdown** to protect data.
+
+:::gotcha
+Do not disable autovacuum. The usual failure is vacuum running too **slowly** (bloat, wraparound warnings), not too aggressively. A single long-running or idle-in-transaction session blocks cleanup by pinning the oldest snapshot.
+:::`,
+  },
+  {
+    id: 'db-int-prepared-statements',
+    question: 'What is a prepared statement, and what two benefits does it give?',
+    difficulty: 'Medium',
+    category: 'Internals',
+    tags: ['prepared-statements', 'plan-cache', 'sql-injection'],
+    answer: `A **prepared statement** sends the SQL **once** with placeholders; the server parses, analyzes, and often plans it, returning a handle you **execute** repeatedly with different bind values.
+
+Two benefits:
+
+1. **Performance** — skip re-parsing and re-planning on each execution; reuse the cached plan. A big win for hot, repeated queries.
+2. **SQL-injection safety** — values travel on a **separate channel** from the SQL text, so input is always **data**, never parsed as code. This is *the* fix for injection.
+
+\`\`\`sql
+PREPARE q (int) AS SELECT * FROM users WHERE id = $1;
+EXECUTE q(42);
+\`\`\`
+
+:::senior
+Plans can be **generic** (planned once, reused) or **custom** (re-planned per value set). Postgres uses custom plans for the first few executions, then a generic plan if it is not much worse — so a prepared statement over **skewed** data can flip to a bad generic plan.
+:::`,
+  },
+  {
+    id: 'db-int-plan-cache-pitfall',
+    question: 'What is parameter sniffing (a plan-cache pitfall), and how do you handle it?',
+    difficulty: 'Hard',
+    category: 'Internals',
+    tags: ['plan-cache', 'parameter-sniffing', 'optimizer', 'skew'],
+    answer: `A cached plan is chosen for the **first** parameter values (or as a generic plan) and reused for **all** later values. When data is **skewed**, a plan optimal for one value is terrible for another.
+
+Example: \`WHERE status = ?\` — \`'archived'\` matches 99% of rows (seq scan is right), \`'pending'\` matches 0.1% (index seek is right). Whichever value planned the cached plan penalizes the other.
+
+Fixes by engine:
+
+- **SQL Server** ("parameter sniffing") — \`OPTION (RECOMPILE)\`, \`OPTIMIZE FOR\`, or a plan guide.
+- **Postgres** — the generic-vs-custom switch; \`plan_cache_mode = force_custom_plan\` to always re-plan.
+- **General** — for wildly skewed columns, don't share one plan: recompile, or split into per-value-class queries.
+
+:::gotcha
+The signature symptom is "the **same** query is sometimes fast, sometimes slow." Suspect a cached or generic plan being reused across skewed parameters before blaming the data.
+:::`,
+  },
+  {
+    id: 'db-int-utf8mb4',
+    question: "In MySQL, what is the difference between utf8 and utf8mb4, and why does it bite people?",
+    difficulty: 'Easy',
+    category: 'Internals',
+    tags: ['mysql', 'utf8mb4', 'encoding', 'gotcha'],
+    answer: `MySQL's **utf8** (alias \`utf8mb3\`) is a **broken 3-byte** encoding covering only the Basic Multilingual Plane. It **cannot** store 4-byte characters — emoji, some CJK extensions, certain symbols. **utf8mb4** is real, full UTF-8 (up to 4 bytes per character).
+
+The classic bug: an app saves "Hello 😀" and legacy \`utf8\` either errors ("Incorrect string value") or truncates at the emoji.
+
+\`\`\`sql
+ALTER TABLE t CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+\`\`\`
+
+Always use **utf8mb4** for user text in MySQL. This trap is MySQL-specific — PostgreSQL's \`UTF8\` has always been true UTF-8.
+
+:::gotcha
+utf8mb4 uses up to 4 bytes/char, so a \`VARCHAR(255)\` index can exceed old key-length limits (767/3072 bytes) — the reason legacy schemas capped indexed columns at \`VARCHAR(191)\`.
+:::`,
+  },
+  {
+    id: 'db-int-hot-updates',
+    question: 'What is a Postgres HOT update, and how does fill factor relate?',
+    difficulty: 'Hard',
+    category: 'Internals',
+    tags: ['hot-update', 'fillfactor', 'mvcc', 'postgres'],
+    answer: `MVCC makes every \`UPDATE\` write a **new** tuple version, which normally must be added to **every index** — expensive. A **HOT (Heap-Only Tuple) update** avoids that: if the update changes **no indexed column** *and* there is **free space on the same page**, Postgres chains the new version to the old **on that page** and **skips the indexes entirely**. Indexes still point at the old slot, which forwards to the new tuple.
+
+**Fill factor** leaves each page partly empty at load time so future updates have room to stay HOT:
+
+\`\`\`sql
+ALTER TABLE t SET (fillfactor = 80);   -- reserve 20% per page for HOT updates
+\`\`\`
+
+Lower fill factor → more HOT updates → less index churn and bloat, at some space cost.
+
+:::senior
+HOT is why "don't index columns you update constantly" matters: updating an **indexed** column forces a non-HOT update that touches every index. HOT chains are tidied by vacuum and page pruning.
+:::`,
+  },
+  {
+    id: 'db-int-columnar-storage',
+    question: 'What is columnar storage and why is it faster for analytics?',
+    difficulty: 'Medium',
+    category: 'Internals',
+    tags: ['columnar', 'olap', 'compression', 'vectorization'],
+    answer: `A **row store** (OLTP default) keeps all of a row's columns together — great for reading or writing whole rows. A **column store** (OLAP: ClickHouse, Redshift, Parquet, DuckDB) stores each **column** contiguously.
+
+Why columnar wins for analytics:
+
+- **Read only needed columns** — \`SUM(amount)\` over a 50-column table touches one column's data, not every row in full.
+- **Compression** — a column is one data type with repeated/similar values → excellent compression (dictionary, RLE) → less I/O.
+- **Vectorized / SIMD execution** — process a batch of one column at a time.
+
+The trade-off: reading or writing a single full row scatters across many column segments, so column stores are poor for OLTP point access.
+
+:::gotcha
+OLTP → row store; analytics → column store. Don't run heavy aggregations on your OLTP row store — offload to a columnar warehouse, replica, or extension (e.g. Citus columnar) instead.
+:::`,
+  },
+  {
+    id: 'db-int-torn-page',
+    question: 'What is a torn page, and how do databases protect against one?',
+    difficulty: 'Hard',
+    category: 'Internals',
+    tags: ['torn-page', 'doublewrite', 'full-page-writes', 'durability'],
+    answer: `A DB page (8-16 KB) is larger than a disk sector, so a crash **mid-write** can leave a page **half-old, half-new** — a **torn (partial) page**. WAL redo alone cannot repair it, because redo assumes the base page is intact.
+
+Protections:
+
+- **PostgreSQL — \`full_page_writes\`**: the **first** change to a page after each checkpoint writes the **entire page image** into the WAL, so recovery restores the whole page before applying redo. (This is why WAL volume spikes right after a checkpoint.)
+- **MySQL/InnoDB — doublewrite buffer**: pages are first written to a sequential doublewrite area, then to their final home; a crash mid-final-write is repaired from the intact copy.
+
+:::gotcha
+Both cost extra write I/O for safety. Disable them **only** on storage that guarantees **atomic** page writes (certain SSDs, ZFS, or sector-aligned pages) — otherwise disabling risks silent corruption after a crash.
+:::`,
+  },
 ];
 
 export default questions;

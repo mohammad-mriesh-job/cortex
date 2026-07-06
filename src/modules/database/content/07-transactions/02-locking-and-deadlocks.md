@@ -97,6 +97,41 @@ for a cycle in the wait-for graph, picks a **victim** (usually the transaction t
 least work / is cheapest to undo), and **aborts it** with a retriable error (Postgres
 `40P01`, MySQL `1213`). The other transaction then continues.
 
+Step through the lock table as the deadlock forms:
+
+```walkthrough
+title: Two transfers deadlock — statement by statement
+code: |
+  -- T1 transfers A -> B;  T2 transfers B -> A
+  T1: UPDATE accounts SET bal = bal - 100 WHERE id = 'A';
+  T2: UPDATE accounts SET bal = bal - 50  WHERE id = 'B';
+  T1: UPDATE accounts SET bal = bal + 100 WHERE id = 'B';
+  T2: UPDATE accounts SET bal = bal + 50  WHERE id = 'A';
+steps:
+  - text: 'T1''s debit takes an **X lock on row A**. The boxes show each row''s lock holder.'
+    array: ['A: T1', 'B: free']
+    highlight: [0]
+    line: 2
+  - text: 'T2''s debit takes an **X lock on row B**. Different rows — no conflict yet.'
+    array: ['A: T1', 'B: T2']
+    highlight: [1]
+    line: 3
+  - text: 'T1''s credit needs **row B** — held by T2. **T1 blocks** and waits.'
+    array: ['A: T1', 'B: T2']
+    highlight: [1]
+    pointers: { 1: 'T1 waits' }
+    line: 4
+  - text: 'T2''s credit needs **row A** — held by T1. **T2 blocks too.** Wait-for cycle: T1 → T2 → T1. Neither can ever finish.'
+    array: ['A: T1', 'B: T2']
+    highlight: [0, 1]
+    pointers: { 0: 'T2 waits', 1: 'T1 waits' }
+    line: 5
+  - text: 'The detector spots the cycle, **aborts T2** (the victim) with error `40P01`/`1213`. Its lock on B is released, T1 completes, and the app retries T2 from `BEGIN`.'
+    array: ['A: T1', 'B: T1']
+    sorted: [0, 1]
+    line: 4
+```
+
 :::gotcha
 A deadlock abort is **not a bug you can eliminate by retrying blindly** — it's the engine
 protecting you. But your app **must** be ready to catch the deadlock error and **retry the
@@ -135,6 +170,23 @@ next-key locks under `REPEATABLE READ`), and even **foreign-key** checks take hi
 so two transactions touching *different* rows can still deadlock. When a deadlock puzzles you,
 read the engine's deadlock log: it prints both transactions and the exact locks in the cycle.
 :::
+
+```flashcards
+title: Locking recall
+cards:
+  - front: 'Which lock pairs can coexist on one row?'
+    back: 'Only **S + S**. S blocks X; X blocks everything — many readers together, one writer alone.'
+  - front: 'The four Coffman conditions for deadlock?'
+    back: '**Mutual exclusion, hold-and-wait, no preemption, circular wait.** Break any one and deadlock is impossible.'
+  - front: 'The #1 practical deadlock prevention?'
+    back: '**Consistent lock ordering** — always touch rows in the same global order (e.g. ascending id), so a wait cycle can''t form.'
+  - front: 'Deadlock error codes to catch and retry?'
+    back: 'PostgreSQL `40P01`, MySQL `1213`, SQL Server `1205`. Retry the **whole transaction**, not the last statement.'
+  - front: 'What is lock **escalation**?'
+    back: 'The engine swapping thousands of row locks for one table lock to save memory (SQL Server ~5,000-lock threshold) — suddenly serializing all writers.'
+  - front: '`SELECT ... FOR UPDATE` vs `FOR SHARE`?'
+    back: '`FOR UPDATE` takes **X** row locks (intent to modify); `FOR SHARE` takes **S** locks (block writers, allow readers).'
+```
 
 ## Check yourself
 

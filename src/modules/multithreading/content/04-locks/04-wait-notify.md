@@ -39,6 +39,60 @@ Notice the ordering: `wait()` **gives up the lock**, so the producer can acquire
 does **not** run immediately — it must **re-acquire** the monitor (after the producer releases) before
 returning from `wait()`.
 
+Under the hood every monitor has **two thread parking lots**: the **entry set** (threads trying to
+*acquire* the monitor — state `BLOCKED`) and the **wait set** (threads that called `wait()` — state
+`WAITING`). `notify` does not wake a thread into running; it only **moves it from the wait set to
+the entry set**, where it must still win the monitor. Step through the full handshake:
+
+```walkthrough
+title: 'The wait/notify handshake: entry set, wait set, monitor'
+code: |
+  synchronized (lock) {          // consumer
+      while (queue.isEmpty())
+          lock.wait();           // release monitor, park in WAIT SET
+      item = queue.remove();
+  }
+  synchronized (lock) {          // producer
+      queue.add(item);
+      lock.notifyAll();          // move waiters to ENTRY SET
+  }                              // release monitor
+steps:
+  - text: 'Consumer **C** acquires the monitor. Producer **P** arrives at its own `synchronized (lock)` while C owns it — P parks in the **entry set**, state `BLOCKED`.'
+    array: ['C', 'P', '—', 0]
+    pointers: { 0: 'owner', 1: 'entry set', 2: 'wait set', 3: 'queue' }
+    line: 1
+  - text: 'C checks the guard: `queue.isEmpty()` is **true**, so C calls `wait()` — it **atomically releases the monitor and moves to the wait set**, state `WAITING`.'
+    array: ['free', 'P', 'C', 0]
+    highlight: [0, 2]
+    pointers: { 0: 'owner', 1: 'entry set', 2: 'wait set', 3: 'queue' }
+    line: 3
+  - text: 'The monitor is free, so **P is promoted from the entry set to owner**. This is why `wait()` must release the lock — otherwise the producer could never get in.'
+    array: ['P', '—', 'C', 0]
+    highlight: [0]
+    pointers: { 0: 'owner', 1: 'entry set', 2: 'wait set', 3: 'queue' }
+    line: 6
+  - text: 'P adds an item and calls `notifyAll()`. **C moves from the wait set to the entry set** — it is *not* running yet; it must re-acquire the monitor first.'
+    array: ['P', 'C', '—', 1]
+    highlight: [1, 3]
+    pointers: { 0: 'owner', 1: 'entry set', 2: 'wait set', 3: 'queue' }
+    line: 8
+  - text: 'P exits its `synchronized` block and **releases the monitor**. Only now can the signalled consumer proceed.'
+    array: ['free', 'C', '—', 1]
+    highlight: [0]
+    pointers: { 0: 'owner', 1: 'entry set', 2: 'wait set', 3: 'queue' }
+    line: 9
+  - text: 'C wins the monitor and returns from `wait()` — **inside the `while` loop** — so it re-checks the guard: `queue.isEmpty()` is now false.'
+    array: ['C', '—', '—', 1]
+    highlight: [0]
+    pointers: { 0: 'owner', 1: 'entry set', 2: 'wait set', 3: 'queue' }
+    line: 2
+  - text: 'The guard holds, so C removes the item and exits. Handshake complete — no busy waiting, no lost signal.'
+    array: ['C', '—', '—', 0]
+    sorted: [0, 1, 2, 3]
+    pointers: { 0: 'owner', 1: 'entry set', 2: 'wait set', 3: 'queue' }
+    line: 4
+```
+
 ## The guarded-block pattern
 
 Two rules make this correct, and both are non-negotiable:

@@ -41,6 +41,8 @@ This directly serves a **read-heavy** workload: add followers to add read capaci
 
 Most real systems use **semi-synchronous**: one synchronous follower (durability safety net) and the rest asynchronous (so a slow follower cannot stall all writes).
 
+Put numbers on the choice: a same-DC sync ack adds **~0.5–1 ms** per write — usually fine. A cross-region sync ack adds **~50–150 ms** per write — usually not, which is why cross-region replication is almost always async. Healthy async lag is **sub-second**; under write bursts or bulk loads it stretches to **seconds or minutes**, which is exactly when stale reads start biting.
+
 :::note
 There is no free lunch. Fully synchronous replication means one slow or dead follower can freeze **every** write. Fully asynchronous means a leader crash can silently lose the last few writes. Semi-sync is the pragmatic middle.
 :::

@@ -140,6 +140,23 @@ request recomputes a missed hot key while the others wait." That single sentence
 most common causes — synchronized expiry and duplicate recomputation.
 :::
 
+```flashcards
+title: Eviction & stampede recall
+cards:
+  - front: 'LRU'
+    back: 'Evict the entry **unused longest**. Assumes temporal locality. O(1) with hashmap + doubly linked list. The default (Redis `allkeys-lru`).'
+  - front: 'LFU'
+    back: 'Evict the **least-hit** entry. Assumes popularity persists. Risk: old high-count items never leave (cache pollution).'
+  - front: 'FIFO'
+    back: 'Evict the **oldest inserted**, ignoring use. Simple, but can evict a hot item.'
+  - front: 'TTL'
+    back: '**Freshness**, not capacity — expires entries after N seconds. Orthogonal to LRU/LFU; always set one as an invalidation safety net.'
+  - front: 'Cache stampede — two-sentence fix'
+    back: '**TTL jitter** (avoid synchronized expiry) + **per-key lock / singleflight** (one recompute, others wait). Optionally stale-while-revalidate so nobody waits.'
+  - front: 'LRU weakness'
+    back: 'A one-off **full scan** touches everything once and flushes the real hot set. (Fix: scan-resistant variants like LRU-K, ARC, or Redis approximated LRU.)'
+```
+
 ## Check yourself
 
 ```quiz

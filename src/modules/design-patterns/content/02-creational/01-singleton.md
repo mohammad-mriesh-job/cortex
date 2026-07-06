@@ -8,8 +8,11 @@ summary: One instance, one global access point — the five ways to build it saf
 tags: singleton, creational, design patterns, thread safety
 ---
 
-**Singleton** guarantees a class has exactly **one instance** and gives everyone a single global
-point of access to it. It is the most-asked pattern — and the most-abused.
+Some things really do exist once per process: the JVM's runtime, a configuration registry, a
+connection pool. The naive answer — "just make it a public static field and hope nobody `new`s a
+second one" — fails the moment two threads race the lazy initializer or someone calls the
+constructor directly. **Singleton** guarantees a class has exactly **one instance** and gives
+everyone a single global point of access to it. It is the most-asked pattern — and the most-abused.
 
 ## Structure
 
@@ -92,17 +95,68 @@ tabs:
       ```
 ````
 
+## Why double-checked locking needs `volatile`
+
+The classic follow-up. `i = new Config()` is **not atomic** — it compiles to roughly three steps:
+allocate memory, run the constructor, publish the reference. The JIT and CPU may **reorder** steps
+2 and 3. Without `volatile`, another thread can observe a **non-null reference to a
+half-constructed object**, skip the lock, and read garbage fields. `volatile` forbids that
+reordering: the write to `i` happens-after the constructor completes, so any thread that sees the
+reference sees a fully built object.
+
+## Two ways to break a singleton — and the fix
+
+A private constructor stops `new`, but not everything:
+
+- **Reflection**: `constructor.setAccessible(true); constructor.newInstance()` happily creates a
+  second instance. Defense: throw from the constructor if the instance already exists.
+- **Serialization**: deserializing creates a fresh object, bypassing the constructor. Defense:
+  implement `readResolve()` to return the existing instance.
+
+```java
+private Object readResolve() { return getInstance(); }  // deserialization returns the one true instance
+```
+
+The **enum singleton dodges both for free** — the JVM guarantees enum constants are instantiated
+exactly once, refuses reflective construction of enums (`IllegalArgumentException`), and
+serializes them by name. That is why *Effective Java* (Item 3) calls a single-element enum the
+best way to implement a singleton.
+
+## In the JDK and Spring
+
+- **`Runtime.getRuntime()`** — the canonical JDK singleton: one runtime per JVM, private
+  constructor, static accessor (eagerly initialized).
+- **`Desktop.getDesktop()`**, **`System.getSecurityManager()`** — same shape.
+- **Spring beans are singletons by default** — one instance *per container*, but crucially managed
+  by DI, not by a static accessor. You get the "one instance" benefit while staying mockable.
+
+## Singleton vs a static utility class
+
+Interviewers often ask why not just make everything `static`:
+
+| | Singleton | Static utility class (`Math`, `Collections`) |
+|--|--|--|
+| Holds state? | Yes — one shared instance with fields | Should be stateless |
+| Can implement an interface? | Yes — passable where the interface is expected | No — cannot polymorph or be injected |
+| Lazy initialization? | Yes (holder/DCL) | Class-load time only |
+| Mockable in tests? | Painful but possible | No — static calls are welded in |
+
+If it has state or needs to be substituted, use a singleton (or better, an injected bean). If it
+is pure functions, a `final` class with a private constructor and static methods is simpler.
+
 ## When to use — and when not to
 
 | Use it for | Avoid it because |
 |--|--|
 | A genuinely single resource: a registry, config, connection pool, logger | It is **global mutable state** — hidden, implicit dependencies |
 | Coordinating access to one shared thing | It makes unit tests hard (cannot swap/mock the instance) |
+| Hardware/OS handles that must not be duplicated | It hides coupling — every caller silently depends on it |
 
 :::gotcha
 Lazy `getInstance()` **without** synchronization is a classic bug — two threads both pass the
 `null` check and create two instances. Use `enum`, the Bill Pugh holder, or double-checked
-locking with `volatile`.
+locking with `volatile`. And remember one-per-**classloader**: two web apps in one servlet
+container each get their own "singleton".
 :::
 
 :::senior

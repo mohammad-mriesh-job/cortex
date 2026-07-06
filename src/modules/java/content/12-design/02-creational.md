@@ -147,6 +147,34 @@ class Maze {                                  // expensive to build from scratch
 Prefer a **copy constructor or static copy factory** over `Object.clone()`. `Cloneable` is a broken contract (Bloch, *Effective Java* Item 13): `clone()` is `protected`, bypasses constructors, and forces messy casts. And prefer **static factory methods** over `new` generally (Item 1) — they have names (`List.of`, `Optional.of`, `Integer.valueOf`), can cache/return cached instances, and can return a subtype. Reach for Builder once you pass ~4 parameters or have several optional ones.
 :::
 
+## Check yourself
+
+```quiz
+title: Creational patterns
+questions:
+  - q: 'What makes the **enum** singleton the recommended form?'
+    options:
+      - text: 'The language guarantees one instance, and it is serialization- and reflection-safe for free'
+        correct: true
+      - 'It is the only lazy option'
+      - 'It avoids generating a class file'
+    explain: 'An enum constant is instantiated once by the JVM, survives serialization without extra code, and cannot be duplicated via reflection — guarantees you would otherwise hand-code. Bloch recommends it in *Effective Java*.'
+  - q: 'Why must the field in double-checked locking be `volatile`?'
+    options:
+      - text: 'Without it, another thread can observe a **partially constructed** object due to reordering'
+        correct: true
+      - 'Because `volatile` makes the block run faster'
+      - 'Because `synchronized` requires volatile fields'
+    explain: 'The write that publishes the reference can be reordered ahead of the constructor''s field writes. `volatile` establishes the happens-before ordering so a reader never sees a half-built instance.'
+  - q: 'What distinguishes **Abstract Factory** from **Factory Method**?'
+    options:
+      - text: 'Abstract Factory creates whole **families** of related products; Factory Method creates one product via a subclass override'
+        correct: true
+      - 'Abstract Factory is always a singleton'
+      - 'Factory Method cannot return an interface type'
+    explain: 'Factory Method defers *one* product''s creation to a subclass. Abstract Factory groups several related creations (button + checkbox) behind one factory so a whole family stays consistent.'
+```
+
 :::key
 Singleton: prefer **enum** or the **static holder**; double-checked locking needs `volatile`. **Factory Method** = one product, subclass chooses. **Abstract Factory** = a *family* of products from one factory. **Builder** = readable, immutable step-by-step construction. **Prototype** = clone an instance — but use a copy constructor, not `Cloneable`.
 :::

@@ -106,6 +106,39 @@ case Rectangle(double w, double h) -> w * h; // bind components directly
 Sealed hierarchies of records give Java algebraic data types — the closed sum-of-products model functional languages use. The compiler-enforced exhaustiveness is the real win: it converts "did I handle every case?" from a runtime hope into a **compile-time guarantee**, eliminating an entire category of bugs as the model evolves. This pairing (sealed + records + switch patterns) is the modern idiom for modelling state machines, ASTs, and command/result types.
 :::
 
+```quiz
+title: Check yourself
+questions:
+  - q: 'For `record Point(int x, int y)`, how do you read the x component?'
+    options:
+      - '`p.getX()`'
+      - text: '`p.x()`'
+        correct: true
+      - '`p.x` — records expose public fields'
+    explain: 'Record accessors are named exactly after the component — no `get` prefix. The fields themselves are `private final`; only the generated accessor methods are public.'
+  - q: '`record Team(List<String> members)` — is a Team instance deeply immutable?'
+    options:
+      - 'Yes — all record state is immutable by definition'
+      - text: 'No — the reference is final, but the list contents can still be mutated by anyone holding it'
+        correct: true
+      - 'No, but the JVM throws on mutation attempts'
+    explain: 'Records are **shallowly** immutable: components can''t be reassigned, but a mutable component object is still mutable. Fix it in the compact constructor: `members = List.copyOf(members);` — which also copies defensively against the caller''s original list.'
+  - q: 'A `switch` over a sealed interface covers all permitted subtypes with no `default`. Someone adds a new permitted record. What happens?'
+    options:
+      - 'The switch throws `MatchException` at runtime for the new type'
+      - text: 'Every such switch **fails to compile** until the new case is handled'
+        correct: true
+      - 'Nothing — switches always need a default branch'
+    explain: 'That is the whole point of sealing: the compiler knows the complete set of subtypes, so exhaustiveness is checked at compile time. Adding a `default` branch would silently swallow future subtypes — omit it to keep the safety net.'
+  - q: 'Which is true of every record?'
+    options:
+      - 'It can extend an abstract base class for shared logic'
+      - text: 'It is implicitly final and cannot be extended, but may implement interfaces'
+        correct: true
+      - 'It allows mutable fields if they are private'
+    explain: 'A record already extends `java.lang.Record`, and Java has single class inheritance — so no other superclass, ever. It''s implicitly final, its components are final, but implementing interfaces (including sealed ones) is exactly how records slot into data hierarchies.'
+```
+
 :::key
 **Records** are concise, immutable, value-based data carriers — components in, generated constructor/accessors/`equals`/`hashCode`/`toString` out; validate via a compact constructor and defensively copy mutable components. **Sealed** types close a hierarchy with `permits`, and pairing them with record patterns enables **exhaustive `switch`** that the compiler verifies — turning data modelling into a safety net.
 :::

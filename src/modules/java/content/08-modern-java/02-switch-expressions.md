@@ -94,6 +94,18 @@ switch (status) {
 }
 ```
 
+The choice between the two forms — and whether you need a `default` — follows from two questions:
+
+```mermaid
+flowchart TD
+    A["Writing a switch"] --> B{"Does each branch produce a value?"}
+    B -->|yes| C["Switch expression: case X -> value / yield"]
+    B -->|"no, side effects"| D["Switch statement: case X -> stmt"]
+    C --> E{"Selector an enum or sealed type?"}
+    E -->|yes| F["Cover all constants — no default needed"]
+    E -->|"no — int or String"| G["Add a default — required to be exhaustive"]
+```
+
 ## Exhaustiveness
 
 A switch **expression** must handle every possible input — the compiler enforces it. For an `enum`, covering **all constants** is enough; no `default` is required:
@@ -114,6 +126,34 @@ Omitting `default` on an exhaustive enum switch is a feature, not laziness: add 
 :::tip
 Reach for a switch *expression* whenever each branch's job is to compute one value. Assigning the whole `switch` to a variable — or returning it directly — is clearer and safer than mutating a variable inside a statement.
 :::
+
+## Check yourself
+
+```quiz
+title: Switch expressions
+questions:
+  - q: 'With arrow labels (`case X -> ...`), when does control fall through to the next case?'
+    options:
+      - text: 'Never — each arrow branch runs alone, no `break` needed'
+        correct: true
+      - 'Always, unless you add `break`'
+      - 'Only for `String` selectors'
+    explain: 'The arrow form eliminates fall-through entirely, killing the classic forgotten-`break` bug. Only the old colon form (`case X:`) falls through unless you `break`.'
+  - q: 'Inside a block branch of a switch **expression**, how do you supply the branch''s value?'
+    options:
+      - text: '`yield value;`'
+        correct: true
+      - '`return value;`'
+      - '`break value;`'
+    explain: '`yield` is to a switch expression what `return` is to a method. A `return` inside would try to return from the *enclosing method* — a compile error in this context.'
+  - q: 'Why does a switch **expression** over an `enum` covering every constant need no `default`?'
+    options:
+      - text: 'Covering all constants is already exhaustive; omitting `default` also turns a *new* constant into a compile error'
+        correct: true
+      - 'Switch expressions never require a default'
+      - 'The JVM inserts a hidden default at runtime'
+    explain: 'A switch expression must be exhaustive, and all enum constants covered = exhaustive. Deliberately leaving off `default` means adding a constant later fails to compile until you handle it — a safety feature, not laziness.'
+```
 
 :::key
 - Arrow labels (`case X ->`) run one branch only — **no fall-through, no `break`**.

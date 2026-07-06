@@ -104,6 +104,34 @@ A fast do/don't lookup distilled from *Effective Java* and modern Java idioms. E
 Two rules cover most of *Effective Java*: **program to interfaces, not implementations**, and **favor immutability**. Immutable objects are automatically thread-safe, hashable, cacheable, and impossible to corrupt — reach for `record` and `final` first.
 :::
 
+## Check yourself
+
+```quiz
+title: Best-practice checks
+questions:
+  - q: 'Why isn''t `if (!map.containsKey(k)) map.put(k, v);` safe on a `Collections.synchronizedMap`?'
+    options:
+      - text: 'Each call is atomic, but the *compound* check-then-act still races — another thread can slip in between'
+        correct: true
+      - '`containsKey` is not synchronized'
+      - '`synchronizedMap` never actually locks'
+    explain: 'Synchronization guards individual calls, not sequences. Use `ConcurrentHashMap` with an atomic `putIfAbsent`/`computeIfAbsent`, which does the check-and-set as one operation.'
+  - q: 'Why replace `s += x` inside a loop with a `StringBuilder`?'
+    options:
+      - text: 'Strings are immutable, so repeated `+=` copies the whole string each time — O(n²) overall'
+        correct: true
+      - '`+=` does not compile on `String`'
+      - '`StringBuilder` is thread-safe'
+    explain: 'Each `+=` builds a new String, making the loop quadratic; `StringBuilder` (pre-sized when possible) is O(n). Note a *single* straight-line concat is already optimized by the compiler, so don''t uglify those.'
+  - q: 'A method returns a collection that may have no elements. What should it return when empty?'
+    options:
+      - text: 'An empty collection (`List.of()`) — never `null`'
+        correct: true
+      - '`null`, to save an allocation'
+      - '`Optional.empty()` wrapping the list'
+    explain: 'Returning `null` forces every caller to null-check and invites NPEs. An empty collection (or empty `Optional` for a single value) removes a whole class of bugs. `Optional<List<T>>` is itself an anti-pattern — use emptiness.'
+```
+
 :::key
 Code to interfaces, prefer immutability, and fail fast. Use `equals` (never `==`) for content, `StringBuilder` in loops, `java.util.concurrent` over hand-rolled locks, the most specific `catch` with `try`-with-resources, and always measure before optimizing. Return empty collections/`Optional` instead of `null`.
 :::

@@ -47,6 +47,17 @@ Java has four access levels, controlling who can see a member:
 
 "Default" means **no keyword at all** — visibility limited to the same package.
 
+Choosing a modifier is a decision, not a habit — walk the narrowest path that satisfies the real callers:
+
+```mermaid
+flowchart TD
+    A["Who needs this member?"] -->|"only this class"| P["private"]
+    A -->|"collaborators in the same package"| D["package-private (no keyword)"]
+    A -->|"subclasses in other packages too"| PR["protected"]
+    A -->|"any code anywhere"| PU["public"]
+    P -.->|"widen only when a real caller appears"| D -.-> PR -.-> PU
+```
+
 ```java
 public class Widget {
     private int secret;      // only this class
@@ -123,6 +134,32 @@ public final class Money {
 :::senior
 Immutability is the default that scales. Mutable shared state is the root of most concurrency bugs; immutable objects eliminate the entire class of problem because there is nothing to synchronize. In modern Java, `record` (covered later) gives you a correct immutable class in a single line — but knowing the manual recipe explains exactly what a record generates.
 :::
+
+```quiz
+title: Check yourself
+questions:
+  - q: 'A field has **no** access modifier. Who can read it?'
+    options:
+      - 'Only the declaring class'
+      - text: 'Any class in the same package — but not subclasses in other packages'
+        correct: true
+      - 'Subclasses anywhere, like `protected`'
+    explain: 'No keyword = package-private. It is *stricter* than `protected` for cross-package subclasses: `protected` adds subclass access on top of package access, package-private does not.'
+  - q: 'Your immutable class stores a `List<String>` passed to the constructor without copying it. What is the risk?'
+    options:
+      - 'None — the field is `private final`, so it cannot change'
+      - text: 'The caller still holds the same list and can mutate your "immutable" state from outside'
+        correct: true
+      - 'The list will be garbage-collected while you still use it'
+    explain: '`final` only fixes the *reference*, not the contents. Without a defensive copy in (`new ArrayList<>(input)`) and an unmodifiable view out (`List.copyOf`), your invariants live at the mercy of every caller.'
+  - q: 'Why does the immutability recipe say to make the class `final`?'
+    options:
+      - '`final` classes are stored in a faster memory region'
+      - text: 'A subclass could add mutable state or override accessors, breaking the immutability guarantee for code that handles the supertype'
+        correct: true
+      - 'Only `final` classes may have `final` fields'
+    explain: 'If `Money` is extendable, `EvilMoney extends Money` can add a mutable field or override behaviour, and any code accepting `Money` can receive one. Sealing the class closes that hole (records get this for free — they are implicitly final).'
+```
 
 :::key
 Encapsulation = hide state (`private`) + expose a controlled API. The four access levels, from most to least restrictive, are `private` → default → `protected` → `public`. Use accessors to *enforce invariants*, defensively copy mutable data crossing the boundary, and prefer immutable classes for safety and simplicity.

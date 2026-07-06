@@ -115,6 +115,23 @@ append can still stall for O(n) while it copies. In latency-sensitive code, pre-
 | Insert / delete at front or middle | **O(n)** | Must shift every later element |
 | Search (unsorted) | **O(n)** | Scan every element |
 
+## Recall
+
+```flashcards
+title: Array operation costs
+cards:
+  - front: 'Access `a[i]`'
+    back: '**O(1)** — address = base + i × elementSize, pure arithmetic.'
+  - front: 'Append at the end of a dynamic array'
+    back: '**Amortized O(1)** — the rare O(n) doubling copy sums to < 2n over n appends.'
+  - front: 'Insert or delete at the front / middle'
+    back: '**O(n)** — every later element shifts one slot.'
+  - front: 'Search an unsorted array vs a sorted one'
+    back: 'Unsorted: **O(n)** scan. Sorted: **O(log n)** binary search.'
+  - front: 'Same Big-O, but why is iterating an array faster than a linked list in practice?'
+    back: '**Cache lines** — contiguous memory means one fetch pulls neighbors in for free; pointer-chasing misses cache on every hop.'
+```
+
 ## Check yourself
 
 ```quiz

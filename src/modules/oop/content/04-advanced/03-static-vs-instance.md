@@ -27,9 +27,9 @@ classDiagram
 
 ```mermaid
 flowchart TD
-  cls["Counter class<br/>static total = 2"] 
-  a["object #1<br/>id = 1"] -.reads/writes.-> cls
-  b["object #2<br/>id = 2"] -.reads/writes.-> cls
+  cls["Counter class — static total = 2"]
+  a["object 1 — id = 1"] -.reads and writes.-> cls
+  b["object 2 — id = 2"] -.reads and writes.-> cls
 ```
 
 ## Static vs instance at a glance
@@ -66,6 +66,22 @@ tabs:
       var acct = new BankAccount();  // each account, own balance
       ```
 ````
+
+## Legitimate statics in the JDK
+
+The JDK shows the idiomatic uses: **pure functions** (`Math.max`, `Integer.parseInt`),
+**constants** (`Duration.ZERO`), and — the big one — **static factory methods** (`List.of(...)`,
+`Optional.empty()`, `Instant.now()`). A static factory beats a constructor when you want a
+descriptive name, caching (`Integer.valueOf` reuses −128..127), or the freedom to return a
+subtype (`List.of` picks different implementations by element count) — Effective Java, Item 1.
+
+### When statics initialise
+
+Static fields and `static { }` blocks run **once**, at class initialisation — triggered by first
+use, executed in textual order, before any instance exists. Two consequences worth knowing: a
+static initialiser that throws surfaces as `ExceptionInInitializerError` and poisons the class
+for the JVM's lifetime, and a circular dependency between two classes can observe a static field
+**before** its initialiser has run — it reads the default value, a genuinely confusing bug.
 
 ## Static methods are *hidden*, not overridden
 

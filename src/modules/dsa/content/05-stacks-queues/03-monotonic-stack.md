@@ -128,6 +128,14 @@ up the value with `a[st.peek()]`. Problems like *Daily Temperatures* ("how many 
 warmer?") are exactly this.
 :::
 
+:::gotcha
+**Equal elements are where monotonic stacks go wrong.** Choosing `<` vs `<=` in the pop condition
+decides whether duplicates resolve each other — for *next greater*, pop on `<` only (an equal
+value is not greater); for *largest rectangle in a histogram*, the choice controls whether
+equal-height bars double-count or under-count width. Decide deliberately per problem, and test
+with an input like `[2, 2, 2]`.
+:::
+
 ## The cousin: monotonic queue (sliding-window max)
 
 Keep a **deque** of indices whose values are decreasing. Pop from the **back** any value smaller

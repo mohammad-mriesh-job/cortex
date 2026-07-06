@@ -82,6 +82,32 @@ public final class Pizza {
 }
 ```
 
+## Step through a chained build
+
+Each fluent call returns the **builder itself**, accumulating state; only `build()` produces the
+product. Watch the state grow:
+
+```walkthrough
+title: Builder — what each chained call does
+code: |
+  Pizza p = new Pizza.Builder(12)
+      .cheese(true)
+      .pepperoni(true)
+      .extraSauce(2)
+      .build();
+steps:
+  - text: '`new Pizza.Builder(12)` allocates the **builder**, not the pizza. The required field (size=12) is captured in the builder''s constructor — you cannot even start without it.'
+    line: 1
+  - text: '`.cheese(true)` sets the builder''s `cheese` field and **returns `this`** — the same builder object. State so far: size=12, cheese=true.'
+    line: 2
+  - text: '`.pepperoni(true)` — same builder again. Optional fields you skip keep their defaults. No `Pizza` exists yet; a half-configured builder is harmless.'
+    line: 3
+  - text: '`.extraSauce(2)` — order of these calls does not matter, another win over positional constructor arguments.'
+    line: 4
+  - text: '`.build()` runs **validation** (are the invariants consistent?), then calls the private `Pizza(Builder b)` constructor exactly once. The result is a complete, immutable object — no observable half-built state.'
+    line: 5
+```
+
 ## When to use Builder
 
 | Reach for Builder when | Skip it when |
@@ -95,13 +121,46 @@ public final class Pizza {
 
 - `StringBuilder` — the canonical mutable builder; `append(...).append(...).toString()`.
 - `Stream.Builder<T>` — `Stream.builder().add(a).add(b).build()`.
-- `StringBuilder`'s cousin `StringBuffer`; also `Calendar.Builder`, `Locale.Builder`,
-  `HttpRequest.newBuilder()` (java.net.http), and `Stream.of(...)` internals.
+- **`HttpRequest.newBuilder()`** (java.net.http, Java 11) — the modern showcase:
+
+```java
+HttpRequest request = HttpRequest.newBuilder()
+    .uri(URI.create("https://api.example.com/orders"))
+    .timeout(Duration.ofSeconds(5))
+    .header("Accept", "application/json")
+    .POST(HttpRequest.BodyPublishers.ofString(json))
+    .build();                       // immutable, reusable request object
+```
+
+- Also `Calendar.Builder`, `Locale.Builder`, `ProcessBuilder`, and every `UriComponentsBuilder` /
+  `ResponseEntity.status(...)` chain in Spring. Lombok's `@Builder` generates exactly the
+  static-nested shape above.
 
 :::tip
 Effective Java (Item 2) recommends Builder for classes with more than a handful of parameters,
 especially when many are optional — it beats both telescoping constructors and JavaBeans setters.
 :::
+
+## Builders and records
+
+A `record` gives you an immutable carrier with a compact constructor for validation — for **up to
+roughly four components** that usually beats a builder. Builders re-enter the picture when:
+
+- there are **many optional** components (a record still forces all of them positionally);
+- construction is **staged** across code (accumulate, then freeze);
+- you want **`toBuilder()`**-style copies: build a near-duplicate with one field changed.
+
+A common modern combo is a record *product* with a hand-written or generated builder for ergonomics.
+
+## When NOT to use it
+
+- **1–3 required fields, nothing optional** — a constructor (or record) is shorter, and the
+  compiler enforces completeness, which a builder cannot: forget a `.field()` call and you find out
+  at runtime, not compile time.
+- **The object is mutable anyway** — a builder in front of a setter-bag adds nothing; the
+  "builder" is just deferred setters.
+- **Performance-critical hot paths** allocating millions of objects — the extra builder allocation
+  is measurable (this is why `StringBuilder` itself exists: to *avoid* intermediate `String`s).
 
 :::gotcha
 A plain fluent builder can leave an object **half-built** if `build()` skips validation. Validate

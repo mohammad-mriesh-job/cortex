@@ -55,6 +55,16 @@ if (user != null && user.isActive()) { ... } // isActive() only runs if user != 
 
 Because `&&` stops at the first `false` and `||` stops at the first `true`, the right side may never run — handy for guarding against null or skipping expensive checks. The non-short-circuiting `&` and `|` always evaluate both sides (rarely what you want for control logic).
 
+```mermaid
+flowchart LR
+    A["evaluate left side of a && b"] -->|"false"| R1["result: false — b is never evaluated"]
+    A -->|"true"| B["evaluate b"]
+    B -->|"false"| R2["result: false"]
+    B -->|"true"| R3["result: true"]
+```
+
+That skipped evaluation is *observable*: if the right side has a side effect (increments a counter, calls a method), short-circuiting means it silently doesn't happen. That's exactly why `if (user != null && user.isActive())` can never throw an NPE — and why `check() & log()` (single `&`) behaves differently from `check() && log()`.
+
 ## Bitwise operators and shifts
 
 These manipulate the individual bits of integer types:

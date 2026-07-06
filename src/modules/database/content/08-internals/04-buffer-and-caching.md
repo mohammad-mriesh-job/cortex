@@ -17,15 +17,15 @@ writes passes through it.
 
 ```mermaid
 flowchart LR
-  EX["Executor<br/>wants page 42"] -->|"1 request"| BP
+  EX["Executor wants page 42"] -->|"1. request"| BP
   subgraph BP["Buffer pool (shared RAM)"]
-    F0["frame 0<br/>page 7 · clean"]
-    F1["frame 1<br/>page 3 · dirty"]
-    F2["frame 2<br/>page 9 · clean"]
+    F0["frame 0 — page 7, clean"]
+    F1["frame 1 — page 3, dirty"]
+    F2["frame 2 — page 9, clean"]
   end
-  BP -->|"2 miss → read"| DISK[("Data files on disk")]
-  DISK -->|"3 load page"| BP
-  BP -->|"4 return pinned page"| EX
+  BP -->|"2. miss, go to disk"| DISK[("Data files on disk")]
+  DISK -->|"3. load page"| BP
+  BP -->|"4. return pinned page"| EX
 ```
 
 Each frame tracks a little bookkeeping:

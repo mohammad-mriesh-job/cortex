@@ -40,6 +40,30 @@ Set<String> b = new LinkedHashSet<>();  // insertion order
 Set<String> c = new TreeSet<>();        // sorted order
 ```
 
+The three implementations sit at different points in the `Set` interface hierarchy — hash-based, hash-plus-order, and tree-based:
+
+```mermaid
+classDiagram
+    Collection <|-- Set
+    Set <|-- SortedSet
+    SortedSet <|-- NavigableSet
+    Set <|.. HashSet
+    HashSet <|-- LinkedHashSet
+    NavigableSet <|.. TreeSet
+    class Collection {
+        <<interface>>
+    }
+    class Set {
+        <<interface>>
+    }
+    class SortedSet {
+        <<interface>>
+    }
+    class NavigableSet {
+        <<interface>>
+    }
+```
+
 - **`HashSet`** is backed by a `HashMap` (elements are keys; values are a shared dummy object). Operations are **O(1)** on average but iteration order is unspecified and can change.
 - **`LinkedHashSet`** extends `HashSet` and threads a doubly-linked list through the entries, so it iterates in **insertion order** at a small memory cost — ideal for *deduplicating while preserving order*.
 - **`TreeSet`** is backed by a red-black tree (`TreeMap`). It keeps elements **sorted** and offers **O(log n)** operations plus the rich `NavigableSet` API.

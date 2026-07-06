@@ -105,15 +105,11 @@ remembers the *last row seen* and seeks past it, so every page costs the same.
 ```mermaid
 flowchart LR
   subgraph OFFSET["OFFSET 100000 LIMIT 20"]
-    O1["read + discard 100,000 rows"] --> O2["return next 20"]
+    O1["read and discard 100,000 rows"] --> O2["return next 20"]
   end
-  subgraph KEYSET["WHERE id &gt; last_id LIMIT 20"]
-    K1["seek to last_id"] --> K2["return next 20"]
+  subgraph KEYSET["WHERE id greater than last_id LIMIT 20"]
+    K1["index seek straight to last_id"] --> K2["return next 20"]
   end
-  class O1 bad;
-  class K1 good;
-  classDef bad fill:#b23b3b,stroke:#7f1d1d,color:#fff;
-  classDef good fill:#2e7d32,stroke:#1b5e20,color:#fff;
 ```
 
 ````tabs
@@ -151,6 +147,27 @@ Keyset pagination needs a **stable, unique, indexed** sort key (often the PK, or
 417" access and get **next/previous** instead — almost always the right call for infinite
 scroll and APIs over large tables.
 :::
+
+:::note
+`LIMIT` is a PostgreSQL/MySQL extension. The ANSI form is `OFFSET 100000 ROWS FETCH FIRST 20
+ROWS ONLY` (SQL Server ≥ 2012, Oracle ≥ 12c, DB2). Same semantics — and the same deep-page
+cost problem, so keyset pagination is the fix everywhere.
+:::
+
+```flashcards
+title: SARGable rewrites — instant recall
+cards:
+  - front: '`WHERE YEAR(created_at) = 2024` → SARGable form?'
+    back: '`WHERE created_at >= ''2024-01-01'' AND created_at < ''2025-01-01''` — half-open range keeps the column bare.'
+  - front: '`WHERE price * 1.2 > 100` → SARGable form?'
+    back: '`WHERE price > 100 / 1.2` — move the arithmetic to the constant side.'
+  - front: 'Case-insensitive email lookup without killing the index?'
+    back: 'Create an **expression index** on `LOWER(email)` and query `WHERE LOWER(email) = ?` — the function must match the indexed expression exactly.'
+  - front: 'Why is deep `OFFSET` slow, in one sentence?'
+    back: 'It **fetches and discards** every skipped row — page depth n costs O(n) no matter what.'
+  - front: 'Keyset pagination''s two requirements?'
+    back: 'A **unique, stable, indexed** sort key, and clients that accept next/prev instead of jump-to-page.'
+```
 
 ## Check yourself
 

@@ -141,6 +141,45 @@ The arrow of dependency now points *toward* the abstraction — the high-level m
 The principles pull in tension: SRP and ISP push toward *many small types*, which can over-fragment a design if applied dogmatically. Treat SOLID as forces to balance, not boxes to tick. The biggest practical payoff is DIP — programming to interfaces is what makes unit testing with mocks, and later swapping implementations, painless.
 :::
 
+## Check yourself
+
+```quiz
+title: 'SOLID'
+questions:
+  - q: '`Square extends Rectangle` compiles and passes all Rectangle method signatures. Which principle does it still violate, and why?'
+    options:
+      - 'OCP — squares cannot be extended.'
+      - text: 'LSP — it breaks Rectangle''s **behavioural contract**: callers assume width and height vary independently, but Square silently couples them, so `setWidth(5); setHeight(4)` yields area 16, not 20.'
+        correct: true
+      - 'SRP — a square has two responsibilities.'
+      - 'DIP — Square depends on a concrete class.'
+    explain: 'LSP is about substitutable *behaviour*, not compilable signatures. A subtype that strengthens preconditions, weakens postconditions, or surprises callers breaks it invisibly at compile time and loudly at runtime.'
+  - q: 'An implementation is full of methods that just `throw new UnsupportedOperationException()`. Which principle is being violated?'
+    options:
+      - 'Open/Closed.'
+      - text: 'Interface Segregation — the interface is too fat, forcing clients to depend on (and stub out) operations they cannot support.'
+        correct: true
+      - 'Single Responsibility.'
+      - 'Dependency Inversion.'
+    explain: 'Throwing stubs are the canonical ISP smell (and usually an LSP time bomb too, since callers of the interface cannot rely on its contract). Split into small role interfaces that implementations can honour fully.'
+  - q: 'What is the difference between Dependency **Inversion** and dependency **injection**?'
+    options:
+      - 'They are two names for the same thing.'
+      - text: 'DIP is a *design principle* — high- and low-level modules both depend on an abstraction. Injection is a *mechanism* — passing dependencies in from outside — that helps you follow DIP.'
+        correct: true
+      - 'DIP is about databases; DI is about tests.'
+      - 'Injection is compile-time; inversion is runtime.'
+    explain: 'You can inject a concrete class (still violating DIP), and you can satisfy DIP without a framework — the principle is about the *direction of the dependency arrow*, toward abstractions.'
+  - q: 'A method computes area with a chain of `instanceof` checks over shape types. What is the OCP-compliant fix?'
+    options:
+      - 'Convert the if-chain to a switch expression.'
+      - text: 'Give each shape type its own `area()` via a common interface (polymorphism) — new shapes then add code without editing existing, tested code.'
+        correct: true
+      - 'Cache the results of the instanceof checks.'
+      - 'Mark the method `final` so nobody changes it.'
+    explain: 'Open for extension, closed for modification: the type-dispatch lives in the polymorphic call, so adding `Triangle` touches zero existing lines. (A `sealed` hierarchy with an exhaustive `switch` is a modern, also-valid alternative when the case set is closed by design.)'
+```
+
 :::key
 **S**RP: one reason to change. **O**CP: extend via new types, don't edit old ones (polymorphism, sealed hierarchies). **L**SP: subtypes must honour the base contract — behaviour, not just signature. **I**SP: prefer small role interfaces. **D**IP: depend on abstractions and inject them. Together they make code that bends instead of breaking.
 :::

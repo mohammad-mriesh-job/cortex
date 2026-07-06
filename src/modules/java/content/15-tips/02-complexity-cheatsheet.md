@@ -125,6 +125,34 @@ flowchart TD
 Big-O hides constants. For tiny `n` (say < 16), an O(n) `ArrayList.contains` often beats an O(1) `HashSet` lookup because there's no hashing overhead and the array sits in one cache line. Profile before micro-optimizing.
 :::
 
+## Check yourself
+
+```quiz
+title: Big-O recall
+questions:
+  - q: 'Since Java 8, what is the worst-case complexity of `HashMap.get` when one bucket is heavily collided?'
+    options:
+      - text: 'O(log n) — a bucket of ≥ 8 entries (table ≥ 64) "treeifies" when keys are `Comparable`'
+        correct: true
+      - 'O(1) always, no matter what'
+      - 'O(n²)'
+    explain: 'Average is O(1). Pathological collisions used to degrade to O(n); Java 8 treeifies a long bucket into a red-black tree, capping the worst case at O(log n) for `Comparable` keys.'
+  - q: 'What is `LinkedList.get(i)`?'
+    options:
+      - text: 'O(n) — it walks the nodes from the nearer end'
+        correct: true
+      - 'O(1) — like an array index'
+      - 'O(log n)'
+    explain: 'A LinkedList has no index arithmetic, so random access is O(n). That plus poor cache locality is why `ArrayList` (O(1) `get`) is almost always the better list.'
+  - q: 'Why is `Arrays.sort(int[])` not stable while `Arrays.sort(Object[])` is?'
+    options:
+      - text: 'Primitives use Dual-Pivot Quicksort (no stability needed); objects use stable, adaptive TimSort'
+        correct: true
+      - 'Both are stable; the premise is false'
+      - 'Primitives cannot be sorted stably by definition'
+    explain: 'Stability only matters when equal elements are distinguishable — impossible for identical primitives, so the JDK uses cache-friendly Dual-Pivot Quicksort. Objects carry identity, so `Arrays.sort(Object[])`/`Collections.sort` use TimSort.'
+```
+
 :::key
 Index access → `ArrayList` (O(1)); key lookup → `HashMap` (O(1) avg); sorted/range queries → `TreeMap`/`TreeSet` (O(log n)); ends/queue/stack → `ArrayDeque` (O(1)); repeated min/max → `PriorityQueue` (O(log n)). Hash ops are O(1) *average* (worst O(n), or O(log n) after treeify); tree ops are a guaranteed O(log n).
 :::

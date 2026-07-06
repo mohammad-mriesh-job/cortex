@@ -120,6 +120,26 @@ textbook **deadlock**. Cooperative interruption is the *only* safe model precise
 gets to stop at a point where its invariants hold.
 :::
 
+## Drill the interrupt API
+
+Three near-identical method names with three different behaviors — this is pure recall material,
+and interviewers use it as a quick filter.
+
+```flashcards
+title: Interruption recall
+cards:
+  - front: '`thread.interrupt()` — what exactly happens?'
+    back: 'Sets the target''s **interrupt flag**. If the target is blocked in `sleep`/`wait`/`join`/`take`, that call wakes up, **throws `InterruptedException`, and clears the flag**. A busy thread just keeps the flag set until it polls.'
+  - front: '`thread.isInterrupted()` vs `Thread.interrupted()`'
+    back: 'Instance `isInterrupted()` **reads** the flag, leaves it set. Static `Thread.interrupted()` reads **and clears** the *current* thread''s flag — call it twice in a row and the second returns `false`.'
+  - front: 'Which JDK calls throw `InterruptedException`?'
+    back: '`sleep`, `wait`, `join`, `BlockingQueue.put/take`, `Future.get`, `Semaphore.acquire`, `CountDownLatch.await`, `lockInterruptibly()`. **Not** interrupt-responsive: `synchronized` monitor entry and plain `Lock.lock()`.'
+  - front: 'Interrupt arrives *before* the thread reaches a blocking call?'
+    back: 'The flag stays set; the **next** blocking call throws `InterruptedException` immediately on entry. The signal is never lost by arriving early — only by being swallowed.'
+  - front: 'Correct responses to catching `InterruptedException`?'
+    back: 'Either **propagate** it (declare `throws`), or **restore the flag** — `Thread.currentThread().interrupt()` — and stop working. An empty catch block destroys the cancellation signal.'
+```
+
 ## Check yourself
 
 ```quiz

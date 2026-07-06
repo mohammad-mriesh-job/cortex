@@ -66,6 +66,34 @@ Asymptotics aren't everything — **constant factors and memory layout** often d
 `HashMap`/`HashSet` iteration order is **unspecified and may change** between JDK versions or after a resize — never rely on it. If a test or feature depends on order, use `LinkedHashMap`/`LinkedHashSet` (insertion) or a `Tree*` (sorted). Likewise, `LinkedList` is almost never the right pick; reach for `ArrayList` (sequence) or `ArrayDeque` (ends).
 :::
 
+## Check yourself
+
+```quiz
+title: Choosing a collection
+questions:
+  - q: 'You need key→value lookup **and** the ability to iterate keys in sorted order with `floor`/`ceiling`. Which map?'
+    options:
+      - text: '`TreeMap` — O(log n) ops plus the `NavigableMap` navigation methods'
+        correct: true
+      - '`HashMap` — O(1) and fastest'
+      - '`LinkedHashMap` — keeps insertion order'
+    explain: '`HashMap` has no order and `LinkedHashMap` only remembers insertion/access order. Only `TreeMap` keeps keys *sorted* and exposes range navigation (`floor`, `ceiling`, `subMap`) — at O(log n).'
+  - q: 'Which of these is safe to rely on across JDK versions?'
+    options:
+      - text: 'Nothing about `HashMap`/`HashSet` **iteration order** — it is unspecified and can change'
+        correct: true
+      - 'That `HashMap` iterates in insertion order'
+      - 'That `HashSet` iterates in sorted order'
+    explain: 'Hash iteration order is unspecified and may change after a resize or between JDK versions. If order matters, use `LinkedHashMap`/`LinkedHashSet` (insertion) or a `Tree*` (sorted).'
+  - q: 'For a general-purpose queue or stack, what is the recommended default?'
+    options:
+      - text: '`ArrayDeque` — array-backed, O(1) at both ends, cache-friendly'
+        correct: true
+      - '`LinkedList` — O(1) node insertion'
+      - '`PriorityQueue` — it already orders elements'
+    explain: '`ArrayDeque` beats `LinkedList` on constant factors and memory, and a `PriorityQueue` is a heap (ordered by priority, O(log n)), not a FIFO/LIFO queue.'
+```
+
 :::key
 Match the collection to data shape (pairs → `Map`, unique → `Set`, sequence → `List`/`Deque`) and ordering need. Default to **`ArrayList` / `HashMap` / `HashSet` / `ArrayDeque`**; pay the O(log n) of `Tree*` only for sorting, and the extra memory of `Linked*` only for order. Memory layout and constant factors decide ties — so profile.
 :::

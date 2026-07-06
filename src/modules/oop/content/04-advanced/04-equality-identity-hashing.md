@@ -101,6 +101,29 @@ tabs:
 A **mutable** field used in `equals`/`hashCode` is a trap: put the object in a `HashSet`, then mutate the field, and its hash changes — the object is now in the "wrong" bucket and effectively lost. Base equality on **immutable** fields.
 :::
 
+## The equals contract — and why inheritance breaks it
+
+`Object.equals` documents five rules: **reflexive** (`a.equals(a)` is true), **symmetric**
+(`a.equals(b)` must match `b.equals(a)`), **transitive**, **consistent**, and
+`a.equals(null)` returns `false`. The rule that fails in real code is **symmetry**, and it fails
+through inheritance:
+
+```java
+class Point { int x, y; }                       // equals compares x, y
+class ColorPoint extends Point { Color c; }     // equals compares x, y, c
+
+Point p       = new Point(1, 2);
+ColorPoint cp = new ColorPoint(1, 2, RED);
+p.equals(cp);   // true  — p checks only x, y
+cp.equals(p);   // false — cp also demands a colour → symmetry broken
+```
+
+There is **no way to keep `instanceof`-based equality and add a comparing field in a subclass**
+(Effective Java, Item 10). The options: switch to `getClass()` equality — exact-class match, but
+then no subclass instance ever equals a parent instance, which surprises LSP-shaped code — or
+**prefer composition**: `ColorPoint` *holds* a `Point` rather than extending it. This constraint
+is exactly why `record`s are final and why value classes should not be designed for extension.
+
 :::senior
 `==` on boxed integers is a notorious pitfall: `Integer` caches `-128..127`, so `Integer.valueOf(100) == Integer.valueOf(100)` is `true` but `Integer.valueOf(200) == Integer.valueOf(200)` is `false`. Always use `.equals()` for wrapper objects. Value semantics = compare contents; reference semantics = compare identity.
 :::

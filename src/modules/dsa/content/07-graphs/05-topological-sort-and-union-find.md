@@ -165,6 +165,14 @@ class DSU {
 }
 ```
 
+:::gotcha
+The classic DSU bug: writing `parent[b] = a` instead of `parent[find(b)] = find(a)`. Unioning
+**non-roots** silently splits sets — elements hanging under `b` keep their old root and stop
+being connected to anything you merge later. Always union the *roots*. And skip the optimizations
+at your peril: without path compression or rank, the parent chains degrade to O(n) per `find` on
+adversarial input.
+:::
+
 :::senior
 **Union-Find detects cycles in an undirected graph.** Process each edge `(u, v)`: if `find(u) ==
 find(v)` *before* you union them, the two are already connected — this edge closes a cycle. This

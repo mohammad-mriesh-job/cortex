@@ -19,7 +19,7 @@ flowchart TD
   C1[Client] --> LB
   C2[Client] --> LB
   C3[Client] --> LB
-  LB{{"Load Balancer<br/>(VIP)"}} --> A1[App Server 1]
+  LB{{"Load Balancer (VIP)"}} --> A1[App Server 1]
   LB --> A2[App Server 2]
   LB --> A3[App Server 3]
   LB --> A4[App Server 4]
@@ -66,6 +66,23 @@ you add or remove a server (N changes). Consistent hashing maps servers and keys
 adding/removing a node only reshuffles the keys in one arc — roughly **1/N of keys move**, not all
 of them. That's why it's the backbone of distributed caches and sharded stores, not just LBs.
 :::
+
+```flashcards
+title: LB algorithms — one-liners
+cards:
+  - front: 'Round robin'
+    back: 'Next server in rotation. Fine when backends and requests are **uniform**.'
+  - front: 'Weighted round robin'
+    back: 'Round robin biased by capacity — bigger servers get proportionally more requests.'
+  - front: 'Least connections'
+    back: 'Pick the server with the fewest **active** connections. Best for long-lived or uneven request durations.'
+  - front: 'Least response time'
+    back: 'Fewest connections **and** lowest observed latency — for latency-sensitive, heterogeneous loads.'
+  - front: 'IP hash / consistent hashing'
+    back: 'Hash client or key to a server — same key hits the same node (cache affinity). Consistent hashing moves only **~1/N** of keys on membership change.'
+  - front: 'L4 vs L7 in one line'
+    back: 'L4 routes on **IP+port** (fast, blind); L7 parses **HTTP** (path/host/cookie routing, TLS termination, small CPU cost).'
+```
 
 ## Health checks
 

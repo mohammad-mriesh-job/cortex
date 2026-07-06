@@ -23,12 +23,12 @@ Vlissides — in *Design Patterns: Elements of Reusable Object-Oriented Software
 
 ```mermaid
 flowchart TD
-    P['Recurring design problem'] --> Q{'Seen this shape before?'}
-    Q -->|Yes| R['Apply a known pattern']
-    Q -->|No| S['Solve directly, stay simple']
-    R --> T['Shared vocabulary + proven structure']
-    R --> U['Risk: over-engineering if forced']
-    S --> V['Refactor to a pattern later if it recurs']
+    P["Recurring design problem"] --> Q{"Seen this shape before?"}
+    Q -->|Yes| R["Apply a known pattern"]
+    Q -->|No| S["Solve directly, stay simple"]
+    R --> T["Shared vocabulary + proven structure"]
+    R --> U["Risk: over-engineering if forced"]
+    S --> V["Refactor to a pattern later if it recurs"]
 ```
 
 ## The pattern template
@@ -49,6 +49,35 @@ reads the same way.
 When you read a new pattern, jump straight to **Intent** and **Consequences** first. Intent tells
 you *if* it fits your problem; Consequences tells you the *price* — that pair decides whether to use it.
 :::
+
+## Patterns fade into languages
+
+A pattern is a workaround for something a language cannot say directly — so as languages evolve,
+patterns dissolve into features. Java itself has absorbed several:
+
+| GoF pattern | What absorbed it in modern Java |
+|--|--|
+| Iterator | The enhanced `for` loop + `Iterable` (Java 5) |
+| Strategy / Command | Lambdas and method references (Java 8) — a one-method strategy *is* a lambda |
+| Observer | `PropertyChangeListener`, event listeners, the `Flow` API (Java 9) |
+| Visitor | Sealed interfaces + pattern-matching `switch` (Java 17+) cover most uses |
+| Singleton | DI containers manage single instances without global state |
+
+This matters in interviews: saying *"in modern Java I would pass a lambda instead of writing a
+Strategy class hierarchy"* shows you know the pattern **and** its current idiomatic form. The
+concept survives; the ceremony shrinks.
+
+## How to present a pattern in an interview
+
+A complete answer has five beats — in this order:
+
+1. **Problem** — the concrete pain (e.g. "constructors with ten optional parameters").
+2. **Name + intent** — one sentence ("Builder: assemble the object step by step").
+3. **Structure** — the two or three roles and how they relate.
+4. **Real example** — a JDK or framework class that *is* this pattern (`StringBuilder`).
+5. **Trade-off** — what it costs and when you would not use it.
+
+Most candidates stop at beat 2. Beats 4 and 5 are what separate "read the book" from "has used it".
 
 ## When NOT to use a pattern
 

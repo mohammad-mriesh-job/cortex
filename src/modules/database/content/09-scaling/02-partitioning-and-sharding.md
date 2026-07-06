@@ -14,16 +14,14 @@ Replication copies the *whole* dataset to every node — great for reads, useles
 
 ```mermaid
 flowchart TB
-    T["Users table<br/>(id, name, email, bio, avatar)"]
-    T --> V["VERTICAL split<br/>by COLUMN"]
-    T --> H["HORIZONTAL split<br/>by ROW"]
-    V --> V1["Table A: id, name, email<br/>(hot, queried often)"]
-    V --> V2["Table B: bio, avatar<br/>(cold, large blobs)"]
-    H --> H1["Rows id 1–1M"]
-    H --> H2["Rows id 1M–2M"]
-    H --> H3["Rows id 2M–3M"]
-    style V fill:#d6eaf8,color:#000
-    style H fill:#fdebd0,color:#000
+    T["Users table (id, name, email, bio, avatar)"]
+    T --> V["VERTICAL split — by COLUMN"]
+    T --> H["HORIZONTAL split — by ROW"]
+    V --> V1["Table A: id, name, email (hot, queried often)"]
+    V --> V2["Table B: bio, avatar (cold, large blobs)"]
+    H --> H1["Rows id 1 to 1M"]
+    H --> H2["Rows id 1M to 2M"]
+    H --> H3["Rows id 2M to 3M"]
 ```
 
 | | **Vertical partitioning** | **Horizontal partitioning (sharding)** |
@@ -49,7 +47,6 @@ flowchart LR
     F -->|= 1| S1["Shard 1"]
     F -->|= 2| S2["Shard 2"]
     F -->|= 3| S3["Shard 3"]
-    style F fill:#f8981d,color:#000
 ```
 
 Three ways to map a key to a shard:
@@ -108,13 +105,12 @@ A **hotspot** is one shard receiving a disproportionate share of traffic. Causes
 ```mermaid
 flowchart TD
     HS["Hotspot: one shard overloaded"]
-    HS --> C1["Cause: low-cardinality key<br/>(e.g. country = 'US')"]
-    HS --> C2["Cause: monotonic key<br/>(all recent writes)"]
-    HS --> C3["Cause: one celebrity/whale row<br/>(Justin Bieber's followers)"]
-    C1 --> F1["Fix: pick higher-cardinality key<br/>or composite key"]
-    C2 --> F2["Fix: hash the key<br/>/ add random prefix"]
-    C3 --> F3["Fix: further split hot entity<br/>(sub-shard, cache, replicate)"]
-    style HS fill:#f5b7b1,color:#000
+    HS --> C1["Cause: low-cardinality key, e.g. country = 'US'"]
+    HS --> C2["Cause: monotonic key — all recent writes"]
+    HS --> C3["Cause: one celebrity or whale row"]
+    C1 --> F1["Fix: higher-cardinality or composite key"]
+    C2 --> F2["Fix: hash the key or add a random prefix"]
+    C3 --> F3["Fix: sub-shard, cache, or replicate the hot entity"]
 ```
 
 ## Rebalancing: consistent hashing
@@ -130,11 +126,8 @@ flowchart LR
       k1["key A"] --> N0["Shard 0"]
       k2["key B"] --> N1["Shard 1"]
       k3["key C"] --> N2["Shard 2"]
-      N2 --> k4["+ new Shard 3<br/>steals only C's slice"]
+      N2 --> k4["new Shard 3 — steals only key C's slice"]
     end
-    style N0 fill:#d5f5e3,color:#000
-    style N1 fill:#d5f5e3,color:#000
-    style N2 fill:#d5f5e3,color:#000
 ```
 
 :::senior
@@ -144,6 +137,23 @@ Real consistent-hashing rings use **virtual nodes** — each physical shard owns
 :::gotcha
 Sharding taxes queries. A query **without** the shard key becomes a **scatter-gather**: hit *every* shard and merge — slow and fan-out-heavy. **Cross-shard JOINs and transactions** are worst of all (no single node has both rows). Design so your hot queries carry the shard key, and dread the ones that do not.
 :::
+
+```flashcards
+title: Sharding recall
+cards:
+  - front: 'Vertical vs horizontal partitioning?'
+    back: '**Vertical** = split by column (hot/cold separation). **Horizontal (sharding)** = split by row across servers — the only one that scales writes.'
+  - front: 'The three shard-routing schemes?'
+    back: '**Hash** (even, no ranges), **range** (ranges work, hotspot-prone), **directory** (flexible, extra dependency).'
+  - front: 'Worst possible sole shard key?'
+    back: 'A **monotonic** one (timestamp, auto-increment) — every write hits the newest shard; zero write scaling.'
+  - front: 'Why consistent hashing for rebalancing?'
+    back: 'Plain `hash % N` remaps almost every key when N changes; a hash **ring** moves only ~**1/N** of keys when a shard joins/leaves.'
+  - front: 'What happens to a query without the shard key?'
+    back: '**Scatter-gather** — fan out to every shard and merge. The router can''t localize it.'
+  - front: 'Virtual nodes are for…'
+    back: 'Smoothing the ring: each physical shard owns many points, so load spreads evenly and a removed node''s keys scatter across all survivors.'
+```
 
 ## Check yourself
 

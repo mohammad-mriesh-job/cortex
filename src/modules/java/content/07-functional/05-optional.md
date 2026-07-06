@@ -71,6 +71,18 @@ String y = opt.orElseGet(() -> createDefault());
 If the "default" has a side effect or is expensive (a DB call, object allocation, incrementing a counter), `orElse` will execute it **even when the value is present**. Use `orElseGet` for anything beyond a cheap constant.
 :::
 
+Choosing how to extract the value is where most `Optional` bugs live — pick by intent:
+
+```mermaid
+flowchart TD
+    A["Have an Optional<T>"] --> B{"Only act when a value is present?"}
+    B -->|yes| C["ifPresent / ifPresentOrElse"]
+    B -->|"need a value back"| D{"What is the fallback?"}
+    D -->|"cheap constant"| E["orElse(default)"]
+    D -->|"expensive / side-effecting"| F["orElseGet(supplier)"]
+    D -->|"absence is a bug"| G["orElseThrow(...)"]
+```
+
 ## Acting on the value
 
 ```java

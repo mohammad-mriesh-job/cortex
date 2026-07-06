@@ -22,6 +22,18 @@ already seen in a map or set, then ask a cheap question about the current elemen
 | **Grouping** | `Map<signature,List>` | "what bucket does this belong to?" | group anagrams |
 | **First unique** | `Map<char,int>` | "which one appeared exactly once?" | first unique character |
 
+Picking the pattern is one question: *what does the brute force's inner loop ask?*
+
+```mermaid
+flowchart TD
+  B["Brute force: for each element, scan the others"] --> Q{"What does the inner scan ask?"}
+  Q -->|"how many times has this appeared?"| F["Frequency map"]
+  Q -->|"does my complement exist?"| TS["Seen-map — the two-sum move"]
+  Q -->|"have I seen this exact value?"| D["Seen-set dedup"]
+  Q -->|"who else shares my signature?"| G["Group by canonical key"]
+  Q -->|"which element is one of a kind?"| U["Count pass, then first with count 1"]
+```
+
 ## Watch it: two-sum with a hash map
 
 The star pattern. Goal: find two indices whose values sum to **target = 9**. Brute force checks all

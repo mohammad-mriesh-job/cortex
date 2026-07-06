@@ -68,6 +68,15 @@ try (var in = new FileInputStream("a.bin")) {
 A `byte` ranges `-128..127`, so the valid data byte `0xFF` *equals* `-1` — using a `byte` loop variable would stop early on binary data. `read()` returns an `int` precisely so the `-1` sentinel is unambiguous.
 :::
 
+## The other decorators worth knowing
+
+- **`DataInputStream` / `DataOutputStream`** — read/write Java primitives in portable big-endian binary (`readInt`, `writeDouble`); the building block of simple wire formats.
+- **`PushbackInputStream`** — `unread()` bytes back onto the stream; handy for parsers that peek at a header before deciding.
+- **`PrintStream` vs `PrintWriter`** — both add `print`/`printf`. The critical difference: `PrintStream` (what `System.out` is) **never throws `IOException`** — it swallows errors and sets an internal flag you must poll with `checkError()`. Fine for console logging, wrong for data you cannot afford to lose.
+- **`ByteArrayInputStream` / `StringReader`** — in-memory sources, invaluable for unit-testing stream-handling code with no files at all.
+
+For whole-file convenience, skip the stream plumbing entirely: `Files.readString(path)`, `Files.readAllLines(path)`, and `Files.lines(path)` (a lazy `Stream<String>` — close it, it holds the file open) cover most everyday reads in one line.
+
 ## Always use try-with-resources
 
 Streams hold OS handles; leaking them eventually exhausts the file-descriptor table. Let the compiler close them: any `AutoCloseable` declared in a `try (...)` header is closed automatically, in **reverse** order, even if the body throws or returns.
@@ -82,6 +91,45 @@ try (var in  = Files.newInputStream(Path.of("a.bin"));
 :::senior
 Closing the outermost wrapper closes the whole chain, and closing a buffered output stream **flushes** it first — forgetting to close is the classic cause of "my file is empty." Also: if both the body *and* `close()` throw, the body's exception propagates and the close exception is attached as a **suppressed** exception (`Throwable.getSuppressed()`). The old hand-written `try/finally` pattern silently discarded the original.
 :::
+
+## Check yourself
+
+```quiz
+title: 'java.io streams'
+questions:
+  - q: 'Why does `InputStream.read()` return an `int` instead of a `byte`?'
+    options:
+      - 'For alignment — ints are faster on 32-bit CPUs.'
+      - text: 'So the end-of-stream sentinel `-1` is distinguishable from the valid data byte `0xFF` (which as a signed `byte` also equals −1).'
+        correct: true
+      - 'Because Java has no unsigned byte literal.'
+      - 'Historical accident with no practical effect.'
+    explain: 'Data bytes come back as 0..255 inside the int; only true end-of-stream is −1. A `byte`-typed loop variable would terminate early the first time binary data contains 0xFF.'
+  - q: 'You write to a `BufferedWriter`, the program exits, and the file is empty. Most likely cause?'
+    options:
+      - 'The disk was full.'
+      - text: 'The writer was never closed — buffered data sat in memory and was never **flushed** to disk.'
+        correct: true
+      - 'The charset was wrong.'
+      - 'BufferedWriter requires calling `sync()` after every line.'
+    explain: 'Closing a buffered stream flushes it first; skipping close abandons the buffer contents. try-with-resources makes this impossible to forget — and closing the outermost wrapper closes (and flushes) the whole chain.'
+  - q: 'You read a UTF-8 text file byte-by-byte with `FileInputStream` and build a String from each byte. What goes wrong?'
+    options:
+      - 'Nothing — UTF-8 is byte-compatible with String.'
+      - text: 'Multi-byte characters get mangled: UTF-8 encodes non-ASCII characters as 2-4 bytes, and byte-level reading splits them. Use a `Reader` with an explicit charset.'
+        correct: true
+      - 'The file cannot be opened without a Reader.'
+      - 'Only performance suffers.'
+    explain: 'Character streams exist precisely to apply charset decoding correctly. `InputStreamReader` buffers partial multi-byte sequences until they are complete — hand-rolled byte-to-char casting corrupts anything beyond ASCII.'
+  - q: 'Which design pattern does `new BufferedReader(new InputStreamReader(socket.getInputStream()))` demonstrate?'
+    options:
+      - 'Factory method.'
+      - text: '**Decorator** — each wrapper implements the same abstraction it wraps and adds one capability (decoding, buffering) without caring what the underlying source is.'
+        correct: true
+      - 'Adapter.'
+      - 'Chain of responsibility.'
+    explain: '`java.io` is the canonical decorator example, quoted in the GoF book itself. (`InputStreamReader` alone is arguably an adapter — bytes to chars — but the compositional wrapping structure is decorator.)'
+```
 
 :::key
 Bytes flow through `InputStream`/`OutputStream`; text flows through `Reader`/`Writer` with an explicit charset, bridged by `InputStreamReader`/`OutputStreamWriter`. Wrap with `Buffered*` for performance — that nesting *is* the decorator pattern. Always manage streams with try-with-resources so they flush and close deterministically.

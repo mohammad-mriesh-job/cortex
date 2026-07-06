@@ -20,13 +20,10 @@ Once data lives on more than one node, the network *will* fail between them. The
 flowchart TD
     subgraph P["A network partition happens (P is not optional)"]
       direction TB
-      Q{"A write arrived, but I<br/>cannot reach the other side.<br/>What do I do?"}
-      Q -->|"Refuse / stall the request<br/>until I can confirm"| CP["CP: stay CONSISTENT<br/>sacrifice availability"]
-      Q -->|"Answer anyway with my<br/>possibly-stale local copy"| AP["AP: stay AVAILABLE<br/>sacrifice consistency"]
+      Q{"A write arrived, but I cannot reach the other side. What do I do?"}
+      Q -->|"refuse or stall until I can confirm"| CP["CP: stay CONSISTENT — sacrifice availability"]
+      Q -->|"answer anyway from my possibly-stale copy"| AP["AP: stay AVAILABLE — sacrifice consistency"]
     end
-    style CP fill:#d6eaf8,color:#000
-    style AP fill:#fdebd0,color:#000
-    style Q fill:#f8981d,color:#000
 ```
 
 :::key
@@ -72,12 +69,11 @@ CAP only speaks about the (rare) partition. **PACELC** covers the other 99% of t
 
 ```mermaid
 flowchart LR
-    Start{"Is there a<br/>partition?"}
-    Start -->|"Yes (P)"| PA["Availability"]
-    Start -->|"Yes (P)"| PC["Consistency"]
-    Start -->|"No — Else (E)"| EL["Low Latency"]
-    Start -->|"No — Else (E)"| EC["Consistency"]
-    style Start fill:#f8981d,color:#000
+    Start{"Is there a partition?"}
+    Start -->|"Yes (P) — pick one"| PA["Availability"]
+    Start -->|"Yes (P) — pick one"| PC["Consistency"]
+    Start -->|"No, Else (E) — pick one"| EL["Low latency"]
+    Start -->|"No, Else (E) — pick one"| EC["Consistency"]
 ```
 
 | System | PACELC | Reading |
@@ -105,11 +101,9 @@ PACELC is the better interview lens because **partitions are rare but the latenc
 
 ```mermaid
 flowchart LR
-    S["Strong<br/>(linearizable)"] --> C["Causal"] --> RYW["Read-your-writes"] --> MR["Monotonic reads"] --> E["Eventual"]
-    S -. "more coordination · higher latency · less available" .-> S
-    E -. "less coordination · lower latency · more available" .-> E
-    style S fill:#d6eaf8,color:#000
-    style E fill:#fdebd0,color:#000
+    S["Strong (linearizable)"] --> C["Causal"] --> RYW["Read-your-writes"] --> MR["Monotonic reads"] --> E["Eventual"]
+    S -. "more coordination, higher latency, less available" .-> S
+    E -. "less coordination, lower latency, more available" .-> E
 ```
 
 :::gotcha

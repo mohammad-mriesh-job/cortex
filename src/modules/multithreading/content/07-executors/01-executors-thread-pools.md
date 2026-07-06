@@ -156,6 +156,28 @@ dumps are readable. For clean shutdown, call `shutdown()` then `awaitTermination
 `shutdownNow()` only as a last resort — it interrupts running tasks.
 :::
 
+## Drill: factory method → pool shape
+
+Every factory is a `ThreadPoolExecutor` configuration in disguise — knowing the exact shape is what
+lets you predict its failure mode.
+
+```flashcards
+title: Executors factory methods
+cards:
+  - front: '`newFixedThreadPool(n)`'
+    back: 'core = max = **n**, **unbounded** `LinkedBlockingQueue`. Steady parallelism; failure mode = silent queue growth → OOM under sustained overload.'
+  - front: '`newCachedThreadPool()`'
+    back: 'core = 0, max = **Integer.MAX_VALUE**, `SynchronousQueue` (no buffering), 60s keep-alive. Great for short bursty tasks; failure mode = **thread explosion** when tasks are slow.'
+  - front: '`newSingleThreadExecutor()`'
+    back: '**One** worker + unbounded queue → tasks run **sequentially in submission order**. Wrapped so it cannot be reconfigured; the thread is replaced if a task kills it.'
+  - front: '`newScheduledThreadPool(n)`'
+    back: '`ScheduledThreadPoolExecutor` with a delay-ordered queue: `schedule` (once, after delay), `scheduleAtFixedRate`, `scheduleWithFixedDelay`. Rate vs delay: fixed-rate aims at a cadence; fixed-delay spaces runs from each *end*.'
+  - front: '`newWorkStealingPool()`'
+    back: 'A **ForkJoinPool** with parallelism = cores and **work-stealing deques** — not FIFO, no execution-order guarantee. Best for many small independent (or recursive) compute tasks.'
+  - front: '`newVirtualThreadPerTaskExecutor()` (Java 21)'
+    back: '**No pool at all** — a fresh virtual thread per task, unbounded concurrency, cheap blocking. The right default for IO-bound fan-out; useless extra weight for CPU-bound work.'
+```
+
 ## Check yourself
 
 ```quiz

@@ -132,6 +132,34 @@ Nested classes share the *behavioural context*, not state: each `@Test` still ge
 Run tests with your build tool (`mvn test` / `gradle test`) or straight from the IDE. Surefire/Gradle discover anything on the test classpath ending in `*Test` by convention — no manual registration.
 :::
 
+## Check yourself
+
+```quiz
+title: JUnit 5
+questions:
+  - q: 'Which JUnit 5 lifecycle methods must be `static` by default?'
+    options:
+      - text: '`@BeforeAll` and `@AfterAll` — they run once around the whole class'
+        correct: true
+      - '`@BeforeEach` and `@AfterEach`'
+      - 'All four lifecycle annotations'
+    explain: 'JUnit creates a fresh test-class instance per `@Test`, so the per-test hooks (`@BeforeEach`/`@AfterEach`) are instance methods, while the run-once hooks (`@BeforeAll`/`@AfterAll`) are static.'
+  - q: 'In `assertEquals(a, b)`, which argument is the *expected* value?'
+    options:
+      - text: 'The first — the convention is `assertEquals(expected, actual)`'
+        correct: true
+      - 'The second'
+      - 'Order does not affect the failure message'
+    explain: 'Expected first, actual second. Swapping them still passes or fails correctly but produces a misleading "expected X but was Y" message.'
+  - q: 'What does `assertThrows(IllegalArgumentException.class, () -> calc.divide(1, 0))` return?'
+    options:
+      - text: 'The caught exception, so you can assert on its message'
+        correct: true
+      - '`void`'
+      - 'A `boolean` for whether it threw'
+    explain: '`assertThrows` verifies the lambda throws the given type and hands back the exception instance, letting you assert on `getMessage()` or other details.'
+```
+
 :::key
 A JUnit 5 test is a `@Test` method following **Arrange-Act-Assert**. `@BeforeEach`/`@AfterEach` run per test (fresh instance each time); `@BeforeAll`/`@AfterAll` are **static** and run once. Use `assertEquals(expected, actual)`, `assertThrows` (which returns the exception), and `assertAll` for grouped checks. Replace duplicated tests with `@ParameterizedTest`, and make reports readable with `@DisplayName` and `@Nested`.
 :::

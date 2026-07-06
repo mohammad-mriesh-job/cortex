@@ -24,9 +24,7 @@ flowchart TD
   N1 --> N3((3))
   N2 --> N4((4))
   N2 --> N5((5))
-  N3 -.->|no left child| X[ ]:::ghost
-  N3 --> N6((6))
-  classDef ghost fill:transparent,stroke:transparent,color:transparent;
+  N3 -->|"right child only — left is null"| N6((6))
 ```
 
 A `Node` is a tiny recursive record — a value plus two references that may be `null`:

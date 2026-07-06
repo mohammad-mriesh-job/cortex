@@ -125,6 +125,32 @@ flowchart LR
 
 You explicitly **create** objects with `new`, but you never explicitly destroy them. When no live reference points to an object, it becomes eligible for **garbage collection**, and the JVM frees the memory automatically — no manual `free()` as in C++.
 
+```quiz
+title: Check yourself
+questions:
+  - q: 'After `Car a = new Car("red"); Car c = a; c.accelerate(10);` — what is `a.getSpeed()`?'
+    options:
+      - '`0` — `c` is a copy, so `a` is untouched'
+      - text: '`10` — `a` and `c` reference the same object'
+        correct: true
+      - 'Compile error — a Car cannot be assigned twice'
+    explain: 'Assignment copies the **reference**, never the object. Both variables point at one heap object, so mutations through either are visible through both.'
+  - q: 'A class declares only `Point(int x, int y)`. What happens on `new Point()`?'
+    options:
+      - 'It works — Java always provides a no-arg constructor'
+      - text: 'Compile error — the default constructor disappears once you declare any constructor'
+        correct: true
+      - 'It works but leaves `x` and `y` uninitialized'
+    explain: 'The compiler only generates the no-arg default constructor when a class declares **no** constructors at all. Declaring one (of any arity) suppresses it; add an explicit `Point()` if you still want one.'
+  - q: 'Where does a `static` field live, and how many copies exist?'
+    options:
+      - 'Inside every object — one copy per instance'
+      - text: 'With the class itself — exactly one copy shared by all instances'
+        correct: true
+      - 'On the stack of whichever thread reads it'
+    explain: 'Static members belong to the class, not to instances, so `Car.totalCars` is one shared slot. That sharing is also why mutable static state is a thread-safety and testability hazard.'
+```
+
 :::key
 A class is a template; objects are instances created with `new`. Variables hold *references* to heap objects, not the objects themselves. `this` is the current object; the default constructor vanishes once you declare your own; and `static` members belong to the class, while instance members belong to each object.
 :::

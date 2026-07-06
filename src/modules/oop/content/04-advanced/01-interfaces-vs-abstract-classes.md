@@ -93,6 +93,26 @@ tabs:
       ```
 ````
 
+## The JDK's answer: use both together
+
+The collections framework pairs every interface with a **skeletal implementation** — `List` +
+`AbstractList`, `Map` + `AbstractMap`, `Set` + `AbstractSet` (Effective Java, Item 20). The
+interface defines the contract everyone codes against; the abstract class absorbs the
+boilerplate for implementers. A read-only list takes two methods:
+
+```java
+List<Integer> range = new AbstractList<>() {
+  public Integer get(int i) { return i; }    // the interesting bit
+  public int size()         { return 100; }  // iterator, equals, etc. inherited
+};
+```
+
+Callers never see `AbstractList` in a signature — the abstract class is an implementation
+convenience; the interface is the API. That division also answers the modern follow-up *"since
+default methods exist, why keep abstract classes at all?"* — because interfaces still cannot hold
+**instance state**, declare **constructors**, or offer **protected** helper methods for
+subclasses only; skeletal classes can.
+
 ## Default methods — evolving an interface
 
 Before Java 8, adding a method to an interface broke every implementer. **`default` methods** ship a body on the interface, so old implementers keep compiling.

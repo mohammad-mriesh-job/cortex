@@ -235,6 +235,262 @@ unbuf := make(chan int)      // handoff + backpressure
 buf   := make(chan int, 100) // decoupled up to 100, then blocks
 \`\`\``,
   },
+  {
+    id: 'mt-models-overview',
+    question: 'Compare the main server concurrency models.',
+    difficulty: 'Medium',
+    category: 'Concurrency Models',
+    tags: ['concurrency-models', 'comparison', 'scalability', 'server'],
+    answer: `Every server model answers one question: how do you serve many concurrent requests without paying for one OS thread per in-flight request? Each trades **simplicity of code** against **scalability and control** — here is the landscape.
+
+| Model | How it scales | Mental model | Main pain point |
+|--|--|--|--|
+| Thread-per-request | one platform thread per request | simple blocking code | ~1 MB/thread caps you at a few thousand |
+| Event loop / async | one thread + callback queue | never block the loop | one CPU hog blocks everyone |
+| Reactive | async streams + backpressure | composable operators | hard to read and debug |
+| Actors | isolated state + async messages | mailboxes, no shared state | protocol design, no backpressure |
+| CSP | channels + ownership transfer | hand values off | channel/deadlock reasoning |
+| Coroutines / virtual threads | cheap M:N user threads | blocking-style code that scales | pinning, newer tooling |
+
+:::key
+Modern default: coroutines/virtual threads give you event-loop scale while keeping thread-per-request's simple, debuggable code.
+:::`,
+  },
+  {
+    id: 'mt-models-reactive',
+    question: 'What is reactive programming, and what are its trade-offs?',
+    difficulty: 'Medium',
+    category: 'Concurrency Models',
+    tags: ['reactive', 'reactive-streams', 'backpressure', 'project-reactor'],
+    answer: `**Reactive programming** models computation as asynchronous **streams of events**. Under the Reactive Streams spec (Project Reactor, RxJava) a \`Publisher\` emits items to a \`Subscriber\` with non-blocking **backpressure**: the subscriber \`request(n)\`s only what it can handle, so a fast producer can't overwhelm it.
+
+**Wins:**
+- High throughput on **few threads** — nothing blocks.
+- Rich, composable operators (\`map\`, \`flatMap\`, \`merge\`, \`retry\`).
+
+**Costs:**
+- Steep learning curve.
+- **Unreadable stack traces** — the "stack" is the operator chain, not your code.
+- Async **"coloring"** spreads: once one method returns \`Mono\`/\`Flux\`, its callers must too.
+- \`ThreadLocal\`/context propagation is painful — you thread a \`Context\` object manually.
+
+:::senior
+Java 21 virtual threads recover most of reactive's scalability with plain **blocking** code, so for ordinary CRUD/IO services reactive is often no longer worth its complexity. Reach for it when you genuinely need stream composition and fine-grained backpressure.
+:::`,
+  },
+  {
+    id: 'mt-models-coroutines',
+    question: 'What are coroutines and how do they relate to threads?',
+    difficulty: 'Medium',
+    category: 'Concurrency Models',
+    tags: ['coroutines', 'kotlin', 'suspend', 'structured-concurrency'],
+    answer: `A **coroutine** is a **suspendable** function multiplexed onto a small pool of OS threads (Kotlin \`suspend\` functions, Python \`async def\`, and conceptually Go goroutines). At a **suspension point** — an \`await\`/\`suspend\` — the coroutine **yields its thread** so another can run, then resumes later exactly where it left off.
+
+So thousands of coroutines share a handful of threads **cheaply** — the same idea as Java virtual threads. Contrast with OS threads, which the kernel schedules **preemptively** and which cost ~1 MB of stack each.
+
+\`\`\`kotlin
+suspend fun load(id: Int) = coroutineScope {   // structured: binds children
+  val user  = async { fetchUser(id) }          // suspends, does not block
+  val order = async { fetchOrder(id) }
+  Page(user.await(), order.await())
+}
+\`\`\`
+
+Kotlin adds **structured concurrency**: \`coroutineScope\` won't return until its children finish, and a child's failure cancels the siblings.`,
+  },
+  {
+    id: 'mt-models-message-vs-shared',
+    question: 'What is the difference between shared-memory and message-passing concurrency?',
+    difficulty: 'Easy',
+    category: 'Concurrency Models',
+    tags: ['message-passing', 'shared-memory', 'comparison', 'locks'],
+    answer: `Two ways for concurrent tasks to coordinate:
+
+- **Shared memory** — tasks read/write **common state** and coordinate with locks/atomics. Fast (no copying) but **race-prone**: forget a lock and you get lost updates or torn reads. This is classic Java threading.
+- **Message passing** — isolated tasks **send values** (copied, or ownership-transferred) over channels/mailboxes. No shared mutable state means **no locks**, but you pay a copying cost and must design **protocols**. Actors and CSP live here.
+
+| | Shared memory | Message passing |
+|--|--|--|
+| Coordinate via | locks, atomics | channels, mailboxes |
+| Cost | cheap (no copy) | copy / handoff |
+| Main risk | data races, deadlock | protocol design, buffering |
+| Examples | Java threads, C pthreads | Erlang, Go, Akka |
+
+:::key
+"Do not communicate by sharing memory; share memory by communicating." Message passing trades raw speed for structural safety.
+:::`,
+  },
+  {
+    id: 'mt-models-vthreads-vs-reactive',
+    question: 'Virtual threads vs reactive programming for I/O scalability — which and why?',
+    difficulty: 'Hard',
+    category: 'Concurrency Models',
+    tags: ['virtual-threads', 'reactive', 'project-loom', 'comparison'],
+    answer: `Both let a **handful of OS threads** serve huge concurrency — they just get there in opposite ways.
+
+- **Reactive** wins by **never blocking**: callbacks and operators keep the thread busy. The cost is an entire async programming model — poor debuggability, unreadable stack traces, and context-propagation pain.
+- **Virtual threads** win by making **blocking cheap**: the JVM unmounts the virtual thread from its carrier on a blocking call. You keep simple, sequential, **thread-per-request** code with normal stack traces and \`ThreadLocal\`s.
+
+| | Reactive | Virtual threads |
+|--|--|--|
+| Mechanism | never block | block cheaply (unmount) |
+| Code style | operator chains | plain sequential |
+| Debugging | hard | normal stack traces |
+| Backpressure | built-in operators | manual (\`Semaphore\`/queue) |
+
+:::senior
+Loom aims to make reactive **unnecessary** for the common blocking-IO case. Reactive still wins where you genuinely need **stream composition** and fine-grained **backpressure** operators.
+:::`,
+  },
+  {
+    id: 'mt-models-thread-per-request',
+    question: 'What is the thread-per-request model and why did it dominate for so long?',
+    difficulty: 'Easy',
+    category: 'Concurrency Models',
+    tags: ['thread-per-request', 'blocking-io', 'platform-threads', 'scalability'],
+    answer: `Dedicate **one thread to each request** (or connection) and write straightforward **blocking** code; the OS scheduler interleaves the threads across cores. This was the default for servlets, JDBC, and classic HTTP servers for two decades.
+
+**Why it dominated:**
+1. **Simple mental model** — code reads top-to-bottom, no callbacks.
+2. **Great stack traces** — one request maps to one stack.
+3. Works with all the **blocking** JDBC/HTTP/file APIs everyone already had.
+
+**The catch:** on **platform threads** each costs ~1 MB of stack plus OS scheduling overhead, capping you at a few **thousand** concurrent requests. That scaling wall is exactly what pushed people toward event loops and reactive.
+
+:::key
+Java 21 **virtual threads** keep the simple thread-per-request model but remove the wall — millions of cheap threads instead of thousands of expensive ones.
+:::`,
+  },
+  {
+    id: 'mt-models-carrier-continuations',
+    question: 'How do virtual threads work under the hood (carriers and continuations)?',
+    difficulty: 'Hard',
+    category: 'Concurrency Models',
+    tags: ['virtual-threads', 'continuations', 'carrier-threads', 'project-loom'],
+    answer: `A virtual thread runs on a **carrier** — a platform thread from a small \`ForkJoinPool\` (by default, one carrier per core). The magic is what happens when it blocks.
+
+1. At a blocking point, the JVM captures the virtual thread's call stack as a **continuation** and **unmounts** it from the carrier.
+2. The freed carrier immediately **mounts and runs another** virtual thread.
+3. When the blocking operation completes, the virtual thread is **re-mounted** — possibly on a *different* carrier — and resumes exactly where it left off.
+
+Its stack lives on the **heap** and grows/shrinks on demand — that's why a virtual thread costs hundreds of bytes rather than ~1 MB.
+
+:::gotcha
+**Pinning** breaks this: inside a \`synchronized\` block or a **native/JNI** call the virtual thread **can't unmount** and stays glued to its carrier while blocked. Enough pinned threads exhaust the tiny carrier pool.
+:::`,
+  },
+  {
+    id: 'mt-models-vthread-when-not',
+    question: 'When should you NOT use virtual threads?',
+    difficulty: 'Medium',
+    category: 'Concurrency Models',
+    tags: ['virtual-threads', 'cpu-bound', 'semaphore', 'scoped-value'],
+    answer: `Virtual threads shine at **blocking IO**. They are the wrong tool when there is no blocking to hide, or when their cheapness works against you.
+
+1. **CPU-bound work** — there's nothing to unmount on, so millions of virtual threads just **oversubscribe** the cores. Use a bounded pool sized to the core count.
+2. **Code that pins** — long \`synchronized\` sections or native calls hold a carrier and can starve the pool.
+3. **Limiting a scarce resource** — don't pool virtual threads to cap concurrency; use a \`Semaphore\` around the resource instead.
+4. **ThreadLocal-heavy code** — millions of per-thread copies waste memory; prefer \`ScopedValue\`.
+
+\`\`\`java
+// Cap DB concurrency with a Semaphore, not a small pool
+Semaphore db = new Semaphore(20);
+db.acquire();
+try { query(); } finally { db.release(); }
+\`\`\`
+
+:::key
+Rule of thumb: create **one virtual thread per task, never pool them** — pool the *resource*, not the thread.
+:::`,
+  },
+  {
+    id: 'mt-models-async-await',
+    question: "What is the async/await model, and what is the 'function coloring' problem?",
+    difficulty: 'Hard',
+    category: 'Concurrency Models',
+    tags: ['async-await', 'function-coloring', 'coroutines', 'javascript'],
+    answer: `**async/await** (JavaScript, C#, Python, Rust) is syntactic sugar over callbacks/futures. \`await\` **suspends** the current function until a future completes, then resumes it — **without blocking** the underlying thread — so you write sequential-looking asynchronous code.
+
+\`\`\`js
+async function load(id) {
+  const user = await fetchUser(id);   // suspends here; thread runs other work
+  return render(user);
+}
+\`\`\`
+
+**The coloring problem:** \`async\` is **contagious**. An \`async\` function can only be \`await\`ed by another \`async\` function, so the ecosystem splits into two "colors" — async and sync — and you end up duplicating or bridging APIs across the divide (\`fetch\` vs a sync equivalent).
+
+:::senior
+**Goroutines and virtual threads avoid coloring entirely**: any ordinary function can block and be unmounted, so there are no two colors of function — one API works everywhere.
+:::`,
+  },
+  {
+    id: 'mt-models-fork-join',
+    question: 'What is the fork/join model?',
+    difficulty: 'Medium',
+    category: 'Concurrency Models',
+    tags: ['fork-join', 'work-stealing', 'parallelism', 'recursive-task'],
+    answer: `A **divide-and-conquer** parallelism model: recursively **split** a task into subtasks (**fork**), solve them in parallel, then **join** and combine the results. In Java you extend \`RecursiveTask\`/\`RecursiveAction\` and submit to a \`ForkJoinPool\`, which uses **work-stealing** — idle threads steal subtasks from busy threads' deques — to balance load.
+
+\`\`\`java
+class SumTask extends RecursiveTask<Long> {
+  protected Long compute() {
+    if (hi - lo <= THRESHOLD) return sequentialSum();   // small enough
+    int mid = (lo + hi) >>> 1;
+    var left = new SumTask(lo, mid).fork();             // fork
+    long right = new SumTask(mid, hi).compute();
+    return right + left.join();                          // join
+  }
+}
+\`\`\`
+
+It suits **CPU-bound, splittable** problems (parallel sort, sum, search); Java's **parallel streams** are built on it.
+
+:::gotcha
+Only split until subtasks are **large enough to amortize** fork/join overhead — a sequential **threshold**. Split too finely and coordination cost dominates the real work.
+:::`,
+  },
+  {
+    id: 'mt-models-disruptor-spsc',
+    question: 'How can specialized queues beat a general BlockingQueue?',
+    difficulty: 'Hard',
+    category: 'Concurrency Models',
+    tags: ['disruptor', 'ring-buffer', 'spsc', 'false-sharing'],
+    answer: `By **exploiting how many producers and consumers** there actually are. A general \`BlockingQueue\` must stay safe for **many-to-many** (MPMC), which forces a lock or CAS on every operation.
+
+A **single-producer/single-consumer (SPSC)** **ring buffer** needs almost no synchronization — just **memory barriers** on the head/tail indices, since only one thread writes each. That is dramatically faster than MPMC's contended CAS.
+
+The **LMAX Disruptor** pushes this further with **mechanical sympathy**:
+- a **preallocated** ring buffer (no per-item allocation or GC churn),
+- **sequence counters** instead of locks,
+- **cache-line padding** to avoid **false sharing** of the hot counters.
+
+The result is millions of ops/sec, far outrunning a lock-based \`ArrayBlockingQueue\` for its use case.
+
+:::senior
+The lesson isn't "use the Disruptor everywhere" — it's **match the data structure to the exact concurrency pattern**. Knowing you have one producer and one consumer is worth a large constant factor.
+:::`,
+  },
+  {
+    id: 'mt-models-green-threads-history',
+    question: "How has Java's threading model evolved — and why does it feel like it went in a circle?",
+    difficulty: 'Medium',
+    category: 'Concurrency Models',
+    tags: ['green-threads', 'virtual-threads', 'history', 'jvm'],
+    answer: `Java's threading has come full circle — user threads, to OS threads, back to user threads — but smarter each time.
+
+| Era | Model | Mapping | Trade-off |
+|--|--|--|--|
+| Java 1.1 | **Green threads** | M:1 (JVM on one OS thread) | cheap, but **can't use multiple cores** and one blocking syscall froze **all** of them |
+| Java 1.2/1.3+ | **Native threads** | 1:1 (OS-scheduled) | true multicore parallelism, but ~1 MB each — reigned for ~20 years |
+| Java 21 | **Virtual threads** | M:N (user-mode) | cheap **and** multicore — the best of both |
+
+Virtual threads revive green threads' cheapness **without** their two flaws: they run on **many carriers** so they use every core, and they **unmount** on IO instead of blocking the carrier.
+
+:::key
+It looks circular but isn't: green threads couldn't parallelize or survive a blocking syscall; virtual threads fix both.
+:::`,
+  },
 ];
 
 export default questions;

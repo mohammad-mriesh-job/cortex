@@ -29,8 +29,8 @@ flowchart TB
     F3 --> D1
   end
   subgraph OOP["OOP — data and logic bundled per object"]
-    O1["Account #1<br/>balance + methods"]
-    O2["Account #2<br/>balance + methods"]
+    O1["Account 1 — balance + methods"]
+    O2["Account 2 — balance + methods"]
   end
 ```
 
@@ -80,17 +80,76 @@ tabs:
       ```
 ````
 
+## Messages, not just data with functions
+
+Alan Kay — who coined the term — insisted the big idea is **messaging**, not classes. When you
+write `account.withdraw(50)`, you are not "calling a function on a struct"; you are sending the
+object a request and letting *it* decide what happens. Which code runs is chosen by the
+**receiver** at runtime (late binding), so a `SavingsAccount` and an `OverdraftAccount` can react
+differently to the same message. That receiver-decides property is what makes OOP more than
+syntax — it is the foundation of polymorphism and of every plugin architecture built on it.
+
+**Tell, don't ask** follows directly: instead of pulling data out of an object and deciding for it
+(`if (acc.getBalance() >= amt) { acc.setBalance(...); }`), tell the object what you want
+(`acc.withdraw(amt)`) and let it enforce its own rules — the invariant is guarded in one place
+instead of at every call site.
+
 ## The paradigm rests on four pillars
 
 Every OOP language is built from these ideas — each gets its own topic later in the track.
 
 ```mermaid
 flowchart LR
-  OOP((OOP)) --> A[Encapsulation<br/>hide & protect state]
-  OOP --> B[Abstraction<br/>expose only what matters]
-  OOP --> C[Inheritance<br/>reuse via is-a]
-  OOP --> D[Polymorphism<br/>one interface, many forms]
+  OOP((OOP)) --> A["Encapsulation — hide and protect state"]
+  OOP --> B["Abstraction — expose only what matters"]
+  OOP --> C["Inheritance — reuse via is-a"]
+  OOP --> D["Polymorphism — one interface, many forms"]
 ```
+
+## OOP in the wild — the JDK is the best example
+
+You already rely on the paradigm every day:
+
+| Idea | JDK / framework example |
+|--|--|
+| One interface, many implementations | `List` → `ArrayList`, `LinkedList`, `CopyOnWriteArrayList` |
+| Encapsulated state behind behaviour | `String` — immutable, never exposes a setter |
+| Substitutable families | `InputStream` → file, socket, and in-memory streams are interchangeable |
+| Objects assembled, not hard-wired | Spring wires collaborating beans via dependency injection |
+
+Code written against `List` in 2004 ran unchanged against `CopyOnWriteArrayList` when Java 5 added
+it — that is the payoff: new behaviour without touching existing callers.
+
+## The misconception interviewers probe
+
+Using a language with classes does not make code object-oriented. A codebase where "entities" are
+bags of getters and setters and all the logic sits in `XxxService` classes is **procedural code in
+OOP syntax** — data and behaviour separated again, exactly what the paradigm set out to fix. This
+style has a name: the **anemic domain model**. In code review it shows up as *feature envy* — a
+service pulling three getters off an object to make a decision the object should make itself.
+
+:::gotcha
+"Java is object-oriented, therefore my Java code is OO" — no. The real question behind *"what is
+OOP?"* is whether you can tell **using classes** apart from **using objects**: state guarded by
+the behaviour that owns it, and callers that tell objects what to do rather than inspect them with
+getters and `instanceof` chains.
+:::
+
+## When OOP is the wrong tool
+
+OOP shines when a system has **long-lived state plus rules that guard it** — accounts, orders,
+sessions, game entities. It is a poor fit for straight-line data transformation (parse → map →
+aggregate → write), where a functional pipeline (`stream().map().filter()`) is shorter and
+clearer. Modern Java admits this: **records** (Java 16) exist precisely because some things *are*
+just data, and forcing behaviour onto them adds ceremony, not safety.
+
+:::senior
+A strong answer names the trade-off instead of cheerleading: OOP buys strong boundaries and
+substitutability at the cost of indirection; functional style buys clear data flow at the cost of
+scattered state handling. Real Java codebases mix both — objects at the boundaries guarding
+invariants, functional pipelines inside methods. Dogmatic "everything must be a class" produces as
+much bad code as global mutable state ever did.
+:::
 
 :::key
 OOP models a program as **collaborating objects** that own their data and expose behaviour. Its

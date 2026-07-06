@@ -125,6 +125,39 @@ Java sidesteps classic multiple-inheritance ambiguity because interfaces traditi
 A `default` method cannot override a method of `Object` (such as `equals`, `hashCode`, or `toString`). The compiler rejects it — those must come from a class.
 :::
 
+```quiz
+title: Check yourself
+questions:
+  - q: '`class C implements A, B` where both interfaces declare `default String greet()`. What must C do?'
+    options:
+      - 'Nothing — Java picks the first interface in the implements clause'
+      - text: 'Override `greet()` itself, optionally delegating with `A.super.greet()`'
+        correct: true
+      - 'Declare itself abstract — the conflict cannot be resolved'
+    explain: 'Two inherited defaults with the same signature are a **compile error** until C overrides the method. Inside that override, `A.super.greet()` (not `super.greet()`) picks a specific inherited implementation.'
+  - q: 'Why can''t an interface declare `default boolean equals(Object o)`?'
+    options:
+      - 'Interfaces may not mention `Object` in signatures'
+      - text: 'Default methods can never override `Object`''s methods — the compiler rejects it'
+        correct: true
+      - 'It can — `List` does exactly this'
+    explain: '`equals`/`hashCode`/`toString` are always inherited from a class (ultimately `Object`), and class methods always win over defaults. Allowing interface defaults for them would make behaviour depend on which interfaces a class implements — so the language forbids it outright.'
+  - q: 'Your subtypes need a shared **mutable field** and a common constructor. Interface or abstract class?'
+    options:
+      - 'Interface — add the field as a constant'
+      - text: 'Abstract class — interfaces cannot hold instance state or constructors'
+        correct: true
+      - 'Either works equally well'
+    explain: 'Interface "fields" are implicitly `public static final` constants — there is no per-instance state and no constructor to initialize it. Shared state and construction logic are exactly the abstract-class use case.'
+  - q: 'What makes an interface *functional* (lambda-compatible)?'
+    options:
+      - 'The `@FunctionalInterface` annotation'
+      - text: 'Having exactly one abstract method'
+        correct: true
+      - 'Having no default or static methods'
+    explain: 'The single-abstract-method (SAM) shape is what matters; the annotation only makes the compiler *enforce* it. Default and static methods don''t count — `Comparator` has many, yet is functional because `compare` is its lone abstract method.'
+```
+
 :::key
 Abstract classes share state and code via single inheritance; interfaces declare capabilities and support multiple inheritance of type. Since Java 8, interfaces carry `default`/`static`/`private` methods for safe API evolution. A single-abstract-method interface is *functional* and lambda-compatible. When two default methods collide (the diamond problem), you must override and disambiguate with `Iface.super.m()`.
 :::

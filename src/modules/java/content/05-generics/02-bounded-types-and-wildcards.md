@@ -71,6 +71,14 @@ This mnemonic tells you which form to pick:
 - If a parameter **consumes** values you put in, use `? super`.
 - If it does **both**, use an exact type `T` (no wildcard).
 
+```mermaid
+flowchart TD
+    A{"How does your method use the collection parameter?"} -->|"reads elements out — producer"| B["? extends T"]
+    A -->|"writes elements in — consumer"| C["? super T"]
+    A -->|"both reads and writes"| D["exact T — wildcards cannot help"]
+    A -->|"neither — size, clear, isEmpty"| E["unbounded ?"]
+```
+
 The JDK's `Collections.copy` is the textbook case:
 
 ```java

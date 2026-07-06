@@ -24,6 +24,8 @@ head.updateAndGet(curr -> new Node(curr));   // atomic transform via CAS loop
 
 The family includes `AtomicInteger`, `AtomicLong`, `AtomicBoolean`, `AtomicReference<V>`, the array variants (`AtomicIntegerArray`…), and field updaters. All share the same engine: **compare-and-swap**.
 
+Mind the naming convention: `incrementAndGet()` returns the **new** value, `getAndIncrement()` the **old** one — mixing them up is an off-by-one that survives code review. Java 9 added `compareAndExchange`, which returns the *witness value* (what the variable actually held) instead of a boolean, saving a re-read in retry loops.
+
 ## How compare-and-swap (CAS) works
 
 CAS is a single atomic CPU instruction (`CMPXCHG` on x86, exposed via `VarHandle`/`Unsafe`). It takes three arguments — a memory location, an **expected** value, and a **new** value — and atomically: *if the location still holds `expected`, store `new` and report success; otherwise do nothing and report failure.*
@@ -91,6 +93,37 @@ Default to high-level tools — `Atomic*` for single shared counters/flags, `Lon
 :::gotcha
 `volatile` gives visibility but **not** atomic read-modify-write: `volatile long x; x++;` still loses updates. That's exactly the gap the atomic classes fill — `AtomicLong.incrementAndGet()` is the correct tool.
 :::
+
+## Check yourself
+
+```quiz
+title: 'CAS & atomics'
+questions:
+  - q: 'What exactly does `compareAndSet(expected, next)` do?'
+    options:
+      - 'Locks the variable, checks it, writes, and unlocks.'
+      - text: 'Atomically writes `next` **only if** the variable still holds `expected`; otherwise it does nothing and reports failure — all in one CPU instruction.'
+        correct: true
+      - 'Writes `next` and returns the previous value.'
+      - 'Spins until the variable equals `expected`, then writes.'
+    explain: 'CAS is a single hardware instruction (e.g. `CMPXCHG`): compare-and-conditionally-swap, no lock, no blocking. Callers build retry loops around it — read, compute, CAS, repeat on failure.'
+  - q: 'A lock-free stack pops node A, another thread pops A and B and pushes A back, then the first thread''s CAS on the head "A" succeeds. What is this failure called?'
+    options:
+      - 'A spurious wakeup.'
+      - text: 'The **ABA problem** — CAS sees the same value and cannot tell the structure changed underneath; fix with `AtomicStampedReference` version stamps.'
+        correct: true
+      - 'A lost update.'
+      - 'Priority inversion.'
+    explain: 'CAS compares only the current value with the expected one. A value that went A→B→A passes the check even though the intervening change may have invalidated what the value points to. A version stamp makes A(v1) ≠ A(v3).'
+  - q: '32 threads hammer one shared counter millions of times per second, and you read the total once per minute for metrics. Best tool?'
+    options:
+      - '`AtomicLong` — it is lock-free, so contention is irrelevant.'
+      - text: '`LongAdder` — it stripes writes across internal cells so threads don''t CAS-fight over one cache line; `sum()` aggregates on the rare read.'
+        correct: true
+      - '`volatile long` with `++`.'
+      - '`synchronized` on a `long` field.'
+    explain: 'Lock-free is not contention-free: with `AtomicLong`, all 32 threads retry against one memory location (cache-line ping-pong). `LongAdder` trades exact-cheap-reads for near-linear write scaling — ideal for hot counters read rarely. `volatile long x; x++` is simply broken.'
+```
 
 :::key
 Atomic classes provide lock-free updates via **compare-and-swap**: read, compute, swap-if-unchanged, retry on failure — optimistic, deadlock-free, and best under low/moderate contention. CAS can't detect an `A→B→A` change (the **ABA problem**); guard references with `AtomicStampedReference`. For hot counters, `LongAdder` stripes writes across cells and beats `AtomicLong`. And `volatile` alone can't make `x++` atomic — that's what these classes are for.

@@ -220,6 +220,208 @@ Keep metric labels **low-cardinality** (region, endpoint, status) — a label li
 
 **When to use each:** backpressure when the sender can afford to wait — it's gentler and loses no work. Load shedding is the **last resort** when you must protect the core *right now* regardless of what senders do. When shedding, be **priority-aware**: drop background jobs, prefetches, retries, and analytics first; protect user-facing and in-flight requests. Both beat an unbounded queue, which keeps accepting work it can never finish until goodput collapses.`,
   },
+  {
+    id: 'sd-rel-spof',
+    question: 'How do you find and eliminate single points of failure in a design?',
+    difficulty: 'Medium',
+    category: 'Reliability',
+    tags: ['spof', 'redundancy', 'availability'],
+    answer: `A **SPOF** is any component whose failure takes down the whole system. **Find them by walking the request path** and asking "what if this dies?" at every hop — LB, app server, DB primary, cache, DNS, a shared config/service-discovery node, even a single AZ, region, or shared power/network domain.
+
+**Eliminate them with redundancy + failover:**
+- multiple LBs (floating IP / anycast);
+- **stateless** app servers behind the LB (any can serve any request);
+- DB **replicas** with automatic failover;
+- **multi-AZ** so no single datacenter is fatal;
+- no single shared dependency without a fallback.
+
+:::senior
+The subtle SPOFs are the **shared** ones: a single Redis every request touches, one NAT gateway, a service-discovery node, or "redundant nodes — all in one AZ." Redundancy only helps if failures are **independent**, so spread replicas across **fault domains** (AZs/regions); otherwise a correlated failure (rack, power, a bad deploy) defeats every copy at once.
+:::`,
+  },
+  {
+    id: 'sd-rel-liveness-vs-readiness',
+    question: 'What is the difference between a liveness and a readiness probe?',
+    difficulty: 'Easy',
+    category: 'Reliability',
+    tags: ['health-checks', 'liveness', 'readiness', 'kubernetes'],
+    answer: `They answer two different questions:
+- **Liveness** — "is this process alive, or **wedged**?" If it fails, the orchestrator (**Kubernetes**) **restarts** the container.
+- **Readiness** — "is this instance ready to receive traffic **right now**?" If it fails, the instance is **pulled from the load-balancer pool** but **not restarted** — it may be warming up (filling caches, JIT) or a dependency is briefly unavailable.
+
+:::gotcha
+Conflating them causes outages. If your **liveness** probe checks a **downstream dependency** and that dependency blips, **every** pod fails liveness and gets **restarted at once** — turning a small hiccup into a fleet-wide **crash-loop**. Keep **liveness shallow** ("am I wedged?") and put dependency checks in **readiness** ("should I get traffic?"), where a failure just removes the pod from rotation until it recovers.
+:::`,
+  },
+  {
+    id: 'sd-rel-chaos-engineering',
+    question: 'What is chaos engineering and why deliberately break production?',
+    difficulty: 'Medium',
+    category: 'Reliability',
+    tags: ['chaos-engineering', 'resilience', 'testing'],
+    answer: `**Chaos engineering** proactively **injects failures** — kill instances, add latency, drop packets, fail a dependency or a whole AZ — to **verify the system survives them** before a real outage runs the experiment for you. Netflix's **Chaos Monkey** randomly kills production instances, forcing every service to be built for instance loss.
+
+The method is scientific:
+1. define a **steady-state hypothesis** (what normal metrics look like);
+2. inject a **controlled** failure with a **limited blast radius**;
+3. check whether the system holds — if not, you just found a latent SPOF or bad assumption.
+
+:::senior
+The premise is that **failure is inevitable**, so you rehearse it **deliberately and continuously in production** rather than hoping. Start small (one instance, off-peak, with a kill switch), automate, then expand. It's the only way to prove redundancy, timeouts, retries, and failover **actually work** — **untested failover is not failover**.
+:::`,
+  },
+  {
+    id: 'sd-rel-dr-tiers',
+    question: 'Compare disaster-recovery strategies and their RTO/RPO trade-offs.',
+    difficulty: 'Hard',
+    category: 'Reliability',
+    tags: ['disaster-recovery', 'rto', 'rpo', 'backup'],
+    answer: `DR strategies trade **cost vs recovery speed**, measured by **RTO** (how long to recover) and **RPO** (how much data you can lose). From cheapest/slowest to priciest/fastest:
+
+| Strategy | RTO | RPO | How |
+|--|--|--|--|
+| **Backup & restore** | Hours–days | Hours | Restore from backups into a fresh environment |
+| **Pilot light** | ~10s of min | Minutes | Core (DB replica) always on; spin up the rest on failover |
+| **Warm standby** | Minutes | Seconds | A scaled-down full copy runs; scale it up on failover |
+| **Hot / active-active** | ~0 | ~0 | Both regions live; just reroute traffic |
+
+:::senior
+Pick the tier from the **business cost** of downtime and data loss, not "always active-active." And note cross-region replication is **asynchronous** (~50–150 ms), so even a hot standby usually has a **non-zero RPO** (the last few seconds of writes) unless you pay for **synchronous** cross-region commits — which cripple write latency.
+:::`,
+  },
+  {
+    id: 'sd-rel-deploy-strategies',
+    question: 'Compare blue-green, canary, and rolling deployments.',
+    difficulty: 'Medium',
+    category: 'Reliability',
+    tags: ['deployment', 'blue-green', 'canary', 'rolling'],
+    answer: `Three safe-deploy strategies:
+
+| Strategy | How | Rollback | Cost |
+|--|--|--|--|
+| **Rolling** | Replace instances a few at a time with the new version | Slow (roll back the same way) | No extra fleet |
+| **Blue-green** | Stand up a full parallel **green** fleet, then flip the LB from blue → green instantly | **Instant** (flip back) | Doubles infra during the switch |
+| **Canary** | Route **1–5%** of traffic to the new version, watch error/latency, then ramp to 100% (or abort) | Fast (shift traffic back) | Small extra + good metrics needed |
+
+:::senior
+**Canary** is the gold standard because it limits **blast radius** and catches regressions on **real traffic**; **blue-green** gives the cleanest rollback. All three require **backward-compatible** schema/API changes so old and new versions coexist mid-rollout — that's the **expand-contract** (parallel-change) migration pattern.
+:::`,
+  },
+  {
+    id: 'sd-rel-graceful-degradation',
+    question: 'What is graceful degradation, and how do you design for it?',
+    difficulty: 'Medium',
+    category: 'Reliability',
+    tags: ['graceful-degradation', 'fallback', 'resilience'],
+    answer: `**Graceful degradation** means that when a dependency fails you lose a **feature, not the whole page** — you degrade functionality instead of erroring out. Common patterns:
+- serve **stale cached** data when the source is down;
+- return a **default/empty** value (show the product page without the "recommended for you" widget if recs are down);
+- **disable** non-critical features under load;
+- **queue** writes to apply later.
+
+Pair it with **circuit breakers** (fail fast to the fallback) and **feature flags** (a kill switch per feature).
+
+:::senior
+Decide **per dependency** what "degraded but useful" means, and **rank features by criticality**: checkout must work even if reviews, recommendations, and analytics don't. This is why you **isolate the critical path** — a failure in a non-essential downstream must never take down the core journey. Amazon still renders a product page even when half its widgets fail.
+:::`,
+  },
+  {
+    id: 'sd-rel-distributed-tracing',
+    question: 'How does distributed tracing work, and what problem does it solve?',
+    difficulty: 'Hard',
+    category: 'Reliability',
+    tags: ['tracing', 'observability', 'spans', 'context-propagation'],
+    answer: `In microservices one user request **fans out across many services**, so a single service's logs can't tell you **where** the latency or error came from. Distributed tracing assigns each request a **trace id** that is **propagated through every hop** (via headers — the W3C \`traceparent\`); each service records a **span** (start/end time, parent span, tags). Collected by a backend (**OpenTelemetry** → **Jaeger**/Zipkin/Tempo), the spans reconstruct the full **causal tree** with per-hop timing, so you can see the DB call that took **400 ms** or the service that returned a 500. Volume is huge, so traces are **sampled** — e.g. 1%, or **tail-based** on errors/slow requests.
+
+:::senior
+The key mechanic is **context propagation**: the trace id must thread through **every** call — synchronous **and** async/queue hops — or the trace breaks into disconnected fragments. Tracing answers **"where in the path"**; metrics say **that** it's slow, logs say **why** — together they're the three pillars.
+:::`,
+  },
+  {
+    id: 'sd-rel-error-budget',
+    question: 'What is an error budget and how does it change how teams operate?',
+    difficulty: 'Medium',
+    category: 'Reliability',
+    tags: ['error-budget', 'slo', 'sre'],
+    answer: `The **error budget** is **100% − SLO** — the amount of unreliability you're **allowed** to spend. At a **99.9%** SLO you may be down **~43.8 min/month**; that downtime is a **budget**.
+
+Its power is as a **policy**:
+- while budget **remains**, the team **ships features** freely — some risk is acceptable;
+- when the budget is **exhausted**, feature work **freezes** and everyone focuses on reliability until you're back in budget.
+
+:::senior
+The error budget **aligns dev and ops**: it dissolves the classic "devs want to ship / SRE wants stability" fight by turning reliability into a **shared, quantified currency**. It also says **100% is the wrong target** — chasing zero errors halts progress for diminishing returns, so you deliberately **spend** the budget on velocity. **Burn-rate alerts** page you when you're spending it too fast.
+:::`,
+  },
+  {
+    id: 'sd-rel-red-use-methods',
+    question: 'What are the RED and USE methods for monitoring?',
+    difficulty: 'Medium',
+    category: 'Reliability',
+    tags: ['monitoring', 'red', 'use', 'golden-signals'],
+    answer: `Two complementary monitoring frameworks:
+
+| Method | For | Track |
+|--|--|--|
+| **RED** | **Services / requests** | **R**ate (req/s), **E**rrors (failed/s), **D**uration (latency distribution) |
+| **USE** | **Resources** (CPU, disk, pool) | **U**tilization, **S**aturation (queue/wait depth), **E**rrors |
+
+RED is the **user-facing** view of a service's health; USE is the **machine-facing** view of a resource. They pair with Google's **four golden signals** (latency, traffic, errors, saturation).
+
+:::senior
+RED tells you the **symptom** users feel — **alert on it**; USE helps you find the **cause** — which resource is saturated. **Page on RED/symptoms** (a spiking error rate), not on raw USE causes (high CPU isn't worth a page if users are fine), but keep USE metrics for **diagnosis**. Rule of thumb: **RED for every service, USE for every resource.**
+:::`,
+  },
+  {
+    id: 'sd-rel-fault-vs-failure',
+    question: 'What\'s the difference between a fault, an error, and a failure?',
+    difficulty: 'Easy',
+    category: 'Reliability',
+    tags: ['fault-tolerance', 'terminology', 'resilience'],
+    answer: `A precise causal chain:
+- **Fault** — a **defect** in a component: a bug, a dying disk, a dropped packet.
+- **Error** — the fault **activating** into an incorrect internal state.
+- **Failure** — that error becoming **externally visible**: the system deviates from spec (wrong answer, or goes down).
+
+**Fault tolerance** = stopping a fault from becoming a failure — redundancy, retries, and failover **mask** the fault so the user never sees a failure.
+
+:::key
+The goal isn't a fault-**free** system — impossible at scale, where disks die, networks drop, and nodes crash constantly — but a fault-**tolerant** one: assume components **will** fault, and design so a fault is **contained and masked** rather than propagating into a user-visible failure. "Everything fails, all the time — plan for it" is the core reliability mindset.
+:::`,
+  },
+  {
+    id: 'sd-rel-data-durability',
+    question: 'How do you make sure committed data is never lost?',
+    difficulty: 'Medium',
+    category: 'Reliability',
+    tags: ['durability', 'replication', 'backups', 'erasure-coding'],
+    answer: `Durability comes from **redundancy across independent failure domains** plus **verification**:
+1. **Replicate** to N copies across **AZs/regions** — survive node, rack, or datacenter loss.
+2. **Write-ahead log + fsync** — a commit survives a crash mid-write.
+3. **Backups + point-in-time recovery** — guard against bugs and bad deletes that replication would faithfully copy.
+4. **Erasure coding** — cheaper redundancy than full replicas (used by **S3**, HDFS).
+5. **Checksums** — detect silent **bit-rot** and repair from a good copy.
+
+**S3** targets **11 nines** of durability (99.999999999%).
+
+:::gotcha
+**Replication is not a backup**: it faithfully replicates a bad \`DELETE\` or a corruption to **every** copy. You need **independent backups** (and to actually **test restores**) for logical errors, plus **geographic spread** for disasters. Durability = copies in independent failure domains **+** integrity checks **+** real, tested backups.
+:::`,
+  },
+  {
+    id: 'sd-rel-postmortem',
+    question: 'What makes a good (blameless) postmortem after an incident?',
+    difficulty: 'Easy',
+    category: 'Reliability',
+    tags: ['postmortem', 'incident-management', 'culture'],
+    answer: `A postmortem documents an incident: a **timeline**, the **impact** (users affected, duration, SLO/error-budget burn), the **root cause(s)**, how it was **detected and mitigated**, and concrete **action items with owners** to prevent recurrence.
+
+**Blameless** means focusing on **systemic** causes — a missing alert, no timeout, an unsafe deploy process — rather than punishing an individual. The reason is practical: **blame makes people hide information**, and hidden information kills the learning that prevents the next outage.
+
+:::senior
+A good postmortem asks **"why did the *system* let a human error cause an outage?"** — no canary, no rollback button, no guardrail — and produces **tracked** fixes, turning each incident into durable resilience. The maturity signal is that action items **actually get done** and repeat incidents drop. **Detection time and blast radius** matter as much as the trigger itself.
+:::`,
+  },
 ];
 
 export default questions;

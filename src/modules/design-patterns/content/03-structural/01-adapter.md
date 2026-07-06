@@ -8,8 +8,12 @@ summary: Wrap an incompatible interface in one the client expects — the plug a
 tags: adapter, structural, design patterns, wrapper, interface
 ---
 
-**Adapter** converts the interface of a class into another interface clients expect. It lets two
-otherwise-incompatible types work together — the software equivalent of a travel plug adapter.
+The code you must call and the interface your code expects rarely match: a payment SDK exposes
+`legacyGet()`, your service layer speaks `fetch()`; a vendor returns `Enumeration`, your code wants
+`List`. You cannot edit the vendor's class, and rewriting your own call sites couples them to the
+vendor forever. **Adapter** converts the interface of a class into another interface clients
+expect. It lets two otherwise-incompatible types work together — the software equivalent of a
+travel plug adapter: same electricity, different pin shape.
 
 ## Structure
 
@@ -86,19 +90,53 @@ tabs:
 Adapter is one of the most common patterns in `java.io` and the collections framework:
 
 - **`InputStreamReader`** — adapts a byte-oriented `InputStream` to the character-oriented
-  `Reader` interface.
-- **`Arrays.asList(T...)`** — adapts a plain array to the `List` interface (a fixed-size view).
-- **`Collections.list(Enumeration)`** — adapts a legacy `Enumeration` to a `List`.
+  `Reader` interface (`OutputStreamWriter` is the mirror image).
+- **`Arrays.asList(T...)`** — adapts a plain array to the `List` interface. It is a fixed-size
+  **view**: `set()` works and writes through to the array, but `add()`/`remove()` throw
+  `UnsupportedOperationException`.
+- **`Collections.list(Enumeration)`** / **`Collections.enumeration(Collection)`** — adapt between
+  the legacy `Enumeration` world and modern collections, in both directions.
+- **`Executors.callable(Runnable)`** — adapts a `Runnable` to the `Callable` interface an executor
+  API expects.
 
 ```java
 // Bytes in, characters out — the adapter bridges the two worlds.
 Reader r = new InputStreamReader(System.in, StandardCharsets.UTF_8);
+
+List<String> view = Arrays.asList("a", "b");  // array adapted to List
+view.set(0, "z");                             // fine — writes through
+// view.add("c");                             // UnsupportedOperationException — fixed size
 ```
 
 :::note
 Adapter changes an interface **without adding behaviour**. If you find yourself adding new
 responsibilities while wrapping, you are writing a **Decorator**, not an Adapter.
 :::
+
+## The wrapper family at a glance
+
+Four patterns wrap an object; interviews hinge on *why* you wrap:
+
+| Pattern | Interface | Behaviour | One-line intent |
+|--|--|--|--|
+| **Adapter** | **Changed** — converts A to B | Unchanged | Make the wrong shape fit |
+| **Decorator** | Same | **Added** | Enrich what it already does |
+| **Proxy** | Same | Same, but **gated** | Control when/whether you reach it |
+| **Facade** | **New, simpler** — over many classes | Orchestrated | One door into a subsystem |
+
+The one-question test: *does the wrapper's type match the wrappee's?* No → Adapter (one class) or
+Facade (a subsystem). Yes → Decorator (adds) or Proxy (controls).
+
+## When NOT to use it
+
+- **You own both sides.** If you can change the adaptee's interface, do that — an adapter between
+  two classes you control is accidental complexity that hides the real fix.
+- **The mismatch is semantic, not syntactic.** An adapter can rename methods and convert types; it
+  cannot reconcile different transaction models or error semantics. Pretending it can produces
+  adapters full of business logic — a bug factory.
+- **Adapter chains.** `AdapterA(AdapterB(AdapterC(x)))` means your abstractions disagree; fix the
+  interfaces rather than stacking translations, since each layer adds latency and stack depth to
+  every call.
 
 :::senior
 Adapters are how you quarantine a nasty third-party or legacy API behind a clean interface your

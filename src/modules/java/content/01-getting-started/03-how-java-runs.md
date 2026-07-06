@@ -16,13 +16,13 @@ Java doesn't compile straight to machine code like C, and it isn't interpreted l
 
 ```mermaid
 flowchart TD
-    A["HelloWorld.java<br/>(human-readable source)"] -->|javac| B["HelloWorld.class<br/>(bytecode)"]
+    A["HelloWorld.java (source)"] -->|javac| B["HelloWorld.class (bytecode)"]
     B -->|java| C{JVM}
     C --> D[Class Loader]
     D --> E[Bytecode Verifier]
     E --> F[Interpreter]
     F -->|hot code| G[JIT Compiler]
-    F --> H["Native machine code<br/>(runs on the CPU)"]
+    F --> H["Native machine code on the CPU"]
     G --> H
 ```
 
@@ -70,8 +70,8 @@ Meanwhile the JVM **profiles** your running code. When a method or loop becomes 
 
 ```mermaid
 flowchart LR
-    A[Bytecode] --> B[Interpret<br/>fast startup]
-    B -->|method gets hot| C[JIT compile<br/>to native]
+    A[Bytecode] --> B["Interpret: fast startup"]
+    B -->|method gets hot| C["JIT compile to native"]
     C --> D[Run at near-native speed]
 ```
 
@@ -92,6 +92,32 @@ The interpreter-plus-JIT model trades startup time for peak throughput, which hu
 ## Write once, run anywhere — for real
 
 Now the famous slogan makes mechanical sense. Your `HelloWorld.class` contains the *same bytes* everywhere. The platform-specific part is the **JVM**: there's a different JVM build for Windows, macOS, and Linux, and each one knows how to turn that universal bytecode into instructions its own CPU understands.
+
+```quiz
+title: Check yourself
+questions:
+  - q: 'A Java server is noticeably faster after running for ten minutes than right after startup. Why?'
+    options:
+      - 'The OS has cached the `.class` files on disk'
+      - text: 'The JIT compiler has had time to profile and compile the hot methods to optimized native code'
+        correct: true
+      - 'The garbage collector has finished deleting unused classes'
+    explain: 'Execution starts interpreted; tiered compilation (C1, then C2) kicks in as methods get hot. Peak throughput arrives only after warm-up — a key JVM trade-off (and the problem GraalVM native images solve for short-lived processes).'
+  - q: 'What does the class loaders'' parent-delegation model guarantee?'
+    options:
+      - 'Classes load faster because parents cache bytecode'
+      - text: 'Core classes like `java.lang.String` are always loaded by the trusted bootstrap loader and cannot be spoofed by application code'
+        correct: true
+      - 'Every class is loaded exactly once per JVM, across all loaders'
+    explain: 'Each loader asks its parent first, so an application-supplied `java.lang.String` on the classpath never wins over the JDK''s own. (A class *can* be loaded by multiple sibling loaders — that''s how app servers isolate deployments.)'
+  - q: 'For `int sum = 2 + 3;`, what does `javap -c` show?'
+    options:
+      - 'Bytecode that loads 2, loads 3, then adds them with `iadd`'
+      - text: '`iconst_5` — the compiler already folded the constant expression'
+        correct: true
+      - 'A call to `Integer.sum(2, 3)`'
+    explain: '`javac` performs **constant folding** on compile-time constants, so the arithmetic never happens at runtime. Disassembling with `javap -c` is the fastest way to verify what the compiler really emitted.'
+```
 
 :::key
 - `javac` compiles source to **portable bytecode** (`.class`); the **JVM** runs it — only the JVM is platform-specific.

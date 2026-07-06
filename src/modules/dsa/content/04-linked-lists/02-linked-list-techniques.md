@@ -112,6 +112,17 @@ the algebra (distances are congruent modulo the loop length) and is the classic 
 "detect a cycle."
 :::
 
+The full algorithm is two phases — detection at speed 2:1, then entry-finding at speed 1:1:
+
+```mermaid
+flowchart TD
+  P1["Phase 1: slow moves +1, fast moves +2"] --> M{"What happens first?"}
+  M -->|"fast reaches null"| NC["No cycle — done"]
+  M -->|"pointers collide inside the loop"| P2["Phase 2: reset one pointer to head"]
+  P2 --> W["Advance BOTH by one step at a time"]
+  W --> E["Second meeting = the cycle entry node"]
+```
+
 ## Iterative reversal — the must-know
 
 Reversal is the single most-asked linked-list operation. Keep three pointers — `prev`, `curr`,

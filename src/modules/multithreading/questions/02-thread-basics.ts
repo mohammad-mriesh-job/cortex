@@ -215,6 +215,303 @@ Fixes:
 Daemon threads are for *discardable* background chores. Anything that **must complete** — writes, flushes, releasing external resources — should not depend on a daemon surviving JVM shutdown.
 :::`,
   },
+  {
+    id: 'mt-basics-runnable-callable-comparison',
+    question: 'Compare Runnable, Callable, and Thread — which is the task and which is the runner?',
+    difficulty: 'Easy',
+    category: 'Thread Basics',
+    tags: ['runnable', 'callable', 'thread'],
+    answer: `Two of these describe **the work** and one describes **who runs it**. \`Runnable\` and \`Callable<V>\` are tasks; \`Thread\` is a runner.
+
+| Type | Method | Returns | Checked exceptions? | Role |
+|------|--------|---------|---------------------|------|
+| \`Runnable\` | \`run()\` | \`void\` | No — must catch/wrap | the task |
+| \`Callable<V>\` | \`call()\` | \`V\` | Yes — \`throws Exception\` | the task |
+| \`Thread\` | \`start()\` | — (a subclass you start) | — | the runner |
+
+Choose \`Callable\` when the work produces a result or can fail with a checked exception; choose \`Runnable\` for fire-and-forget side effects. Hand either to a \`Thread\` or — far better — an \`ExecutorService\`.
+
+:::key
+\`Runnable\`/\`Callable\` = *what* to do; \`Thread\`/\`ExecutorService\` = *who* does it. \`Thread\` is not a task — it is a runner you *can* (but rarely should) subclass.
+:::`,
+  },
+  {
+    id: 'mt-basics-sleep-wait-yield-join',
+    question: 'Compare sleep(), wait(), yield(), and join() — especially their effect on held locks.',
+    difficulty: 'Hard',
+    category: 'Thread Basics',
+    tags: ['sleep', 'wait', 'yield', 'join'],
+    answer: `The single most important distinction: **only \`wait()\` releases a lock.** The other three cling to every monitor the thread already holds.
+
+| Method | Releases held lock? | Declared on | How it wakes | Typical use |
+|--------|---------------------|-------------|--------------|-------------|
+| \`sleep(t)\` | **No** — keeps all locks | \`static Thread\` | timeout or interrupt | fixed pause |
+| \`wait()\` | **Yes** — releases *that* monitor | \`Object\` (must hold it) | notify / notifyAll / interrupt / spurious / timeout | condition wait |
+| \`yield()\` | **No** — keeps locks | \`static Thread\` (hint) | scheduler may ignore it | give up the CPU |
+| \`join()\` | **No** — the *caller* blocks | \`Thread\` instance | target dies / timeout / interrupt | await completion |
+
+:::gotcha
+Calling \`sleep()\` inside a \`synchronized\` block does **not** let anyone else in — the sleeping thread still owns the monitor. To release the lock while paused you need \`wait()\`.
+:::`,
+  },
+  {
+    id: 'mt-basics-yield',
+    question: 'What does Thread.yield() do, and when is it actually useful?',
+    difficulty: 'Medium',
+    category: 'Thread Basics',
+    tags: ['yield', 'scheduler', 'hint'],
+    answer: `\`Thread.yield()\` is a **non-binding hint** to the scheduler that the current thread is willing to give up its core to another *runnable* thread of similar priority. The scheduler may **ignore it entirely** — on some platforms it is effectively a no-op, and its behavior varies by OS and JVM.
+
+It is **not** a coordination primitive: it releases no locks, makes no happens-before guarantee, and never blocks. Using it to "let another thread catch up" is a race, not synchronization.
+
+Rare legitimate uses:
+1. A backoff hint inside a spin-wait — though \`Thread.onSpinWait()\` is the modern, purpose-built choice.
+2. Nudging the scheduler in stress tests to shake out interleavings.
+
+:::gotcha
+Treat \`yield()\` as a performance hint, never as correctness. If your logic *needs* another thread to run first, use \`join()\`, a latch, or \`wait\`/\`notify\`.
+:::`,
+  },
+  {
+    id: 'mt-basics-lifecycle-transitions',
+    question: 'Walk through the exact transitions between the six Thread states.',
+    difficulty: 'Medium',
+    category: 'Thread Basics',
+    tags: ['lifecycle', 'thread-state', 'transitions'],
+    answer: `A thread moves through the \`Thread.State\` enum with **RUNNABLE as the central hub** — every blocking state routes back through it.
+
+| From | Trigger | To |
+|------|---------|-----|
+| NEW | \`start()\` | RUNNABLE |
+| RUNNABLE | contend for a monitor | BLOCKED |
+| BLOCKED | acquire the monitor | RUNNABLE |
+| RUNNABLE | \`wait()\` / \`join()\` / \`LockSupport.park()\` | WAITING |
+| WAITING | notify / notifyAll / unpark / target dies | RUNNABLE |
+| RUNNABLE | \`sleep(t)\` / \`wait(t)\` / \`join(t)\` | TIMED_WAITING |
+| TIMED_WAITING | timeout or signal | RUNNABLE |
+| RUNNABLE | \`run()\` returns or throws | TERMINATED |
+
+Key facts:
+- There is **no direct BLOCKED ↔ WAITING** edge — you always pass back through RUNNABLE.
+- **NEW** and **TERMINATED** are one-way: you can never re-enter them.
+- BLOCKED means "waiting for a monitor lock"; WAITING/TIMED_WAITING mean "parked until signalled".
+
+:::key
+RUNNABLE is the hub. Every block, wait, or sleep eventually returns through RUNNABLE before the thread can make progress or die.
+:::`,
+  },
+  {
+    id: 'mt-basics-uncaught-exception',
+    question: 'What happens when a thread throws an uncaught exception from run()?',
+    difficulty: 'Medium',
+    category: 'Thread Basics',
+    tags: ['exception', 'uncaughtexceptionhandler', 'executor'],
+    answer: `That **one** thread terminates; **every other thread keeps running**. Before it dies, the JVM hands the exception down a handler chain:
+
+1. the thread's own \`UncaughtExceptionHandler\`, if set;
+2. else its \`ThreadGroup\`'s handler;
+3. else the **default** handler, which prints the stack trace to \`stderr\`.
+
+\`\`\`java
+t.setUncaughtExceptionHandler((thr, ex) -> log.error("died: {}", thr.getName(), ex));
+Thread.setDefaultUncaughtExceptionHandler(handler);  // JVM-wide fallback
+\`\`\`
+
+In an executor, routing depends on **how you submitted**:
+
+| Submit path | Where the exception goes |
+|-------------|--------------------------|
+| \`execute(runnable)\` | the uncaught-exception handler (thread dies, pool replaces it) |
+| \`submit(task)\` | **captured in the \`Future\`** — surfaces only as \`ExecutionException\` on \`get()\` |
+
+:::gotcha
+\`submit()\` **swallows** the failure until you call \`Future.get()\`. Forget to inspect the future and a task can fail completely silently — a classic production trap.
+:::`,
+  },
+  {
+    id: 'mt-basics-thread-priority',
+    question: 'How reliable is Thread.setPriority() for controlling scheduling?',
+    difficulty: 'Medium',
+    category: 'Thread Basics',
+    tags: ['priority', 'scheduler', 'portability'],
+    answer: `Barely — treat it as a **hint you cannot depend on**. \`setPriority(int)\` takes \`Thread.MIN_PRIORITY\` (1) through \`Thread.MAX_PRIORITY\` (10), default \`NORM_PRIORITY\` (5), and the JVM maps those onto whatever the OS offers. That mapping is **wildly platform-dependent**: several Java priorities may collapse to one OS level, and on typical Linux setups user-space priorities are **effectively ignored**.
+
+Never use it for correctness or ordering. Real hazards it invites:
+- **Starvation** — a low-priority thread may never run under load.
+- **Priority inversion** — a high-priority thread blocks on a lock held by a starved low-priority one.
+
+\`\`\`java
+t.setPriority(Thread.MAX_PRIORITY);  // a suggestion, not a guarantee
+\`\`\`
+
+:::key
+If ordering or fairness matters, encode it explicitly with locks, bounded queues, or executor configuration — not thread priorities.
+:::`,
+  },
+  {
+    id: 'mt-basics-thread-naming',
+    question: 'Why should you give your threads meaningful names?',
+    difficulty: 'Easy',
+    category: 'Thread Basics',
+    tags: ['naming', 'debugging', 'threadfactory'],
+    answer: `Thread names show up in **thread dumps, logs, and profilers**. A stack labelled \`order-writer-3\` tells you instantly what died; the default \`pool-2-thread-7\` tells you nothing. Naming is cheap, high-leverage operational hygiene.
+
+Ways to set a name directly:
+
+\`\`\`java
+new Thread(task, "order-writer");   // constructor
+t.setName("heartbeat");             // any time before/at run
+\`\`\`
+
+For pools, supply a **\`ThreadFactory\`** — otherwise every worker gets a generic \`pool-N-thread-M\` name:
+
+\`\`\`java
+ThreadFactory tf = Thread.ofPlatform().name("io-worker-", 0).factory();
+ExecutorService pool = Executors.newFixedThreadPool(4, tf);
+\`\`\`
+
+:::key
+Name threads at creation. The few seconds it costs pays for itself the first time you read a production thread dump at 2 a.m.
+:::`,
+  },
+  {
+    id: 'mt-basics-runnable-lambda',
+    question: 'How do lambdas and method references relate to Runnable and Callable?',
+    difficulty: 'Easy',
+    category: 'Thread Basics',
+    tags: ['lambda', 'runnable', 'callable'],
+    answer: `Both \`Runnable\` and \`Callable<V>\` are \`@FunctionalInterface\` types — one abstract method each — so any lambda or method reference of the right shape **is** one. You rarely write \`new Runnable() { ... }\` anymore.
+
+\`\`\`java
+new Thread(() -> doWork()).start();            // Runnable: () -> void
+Future<Integer> f = pool.submit(() -> 6 * 7);  // Callable: () -> V
+pool.execute(logger::flush);                   // method reference
+\`\`\`
+
+The compiler resolves \`Runnable\` vs \`Callable\` from context: a value-returning body in a \`submit\` slot becomes a \`Callable\`; a void body becomes a \`Runnable\`.
+
+:::key
+The lambda **is** the task (\`Runnable\`/\`Callable\`); the \`Thread\` or executor is the runner. Lambdas make it concise, but the separation of *work* from *who runs it* is exactly the same.
+:::`,
+  },
+  {
+    id: 'mt-basics-interrupt-blocking-io',
+    question: 'Can you interrupt a thread that is blocked on I/O?',
+    difficulty: 'Hard',
+    category: 'Thread Basics',
+    tags: ['interrupt', 'blocking-io', 'nio'],
+    answer: `It depends entirely on **what the thread is blocked in**:
+
+| Blocked in | Response to \`interrupt()\` |
+|------------|----------------------------|
+| \`sleep\` / \`wait\` / \`join\` / \`BlockingQueue\` / \`Lock.lockInterruptibly\` | throws \`InterruptedException\` |
+| classic \`InputStream\` / \`Socket\` read | **nothing** — flag is set, the read keeps blocking |
+| \`java.nio\` \`InterruptibleChannel\` | channel closes, throws \`ClosedByInterruptException\` |
+
+Classic blocking socket and stream reads are **not interruptible**: \`interrupt()\` only sets the flag, and the read stays parked in the OS. The one way to unblock it is to **close the socket/stream from another thread** — the pending read then throws \`SocketException\`/\`IOException\`.
+
+\`\`\`java
+// cancellation for legacy I/O = close the resource
+public void cancel() { closeQuietly(socket); }  // the read() unblocks with an exception
+\`\`\`
+
+:::senior
+Design cancellation around the *resource*, not the flag, for legacy I/O: keep a handle to the socket/stream and close it to unblock the reader. \`java.nio\` channels give you real interruptibility for free.
+:::`,
+  },
+  {
+    id: 'mt-basics-inheritable-threadlocal',
+    question: 'What is InheritableThreadLocal, and why is it dangerous with thread pools?',
+    difficulty: 'Hard',
+    category: 'Thread Basics',
+    tags: ['threadlocal', 'inheritablethreadlocal', 'thread-pool'],
+    answer: `An \`InheritableThreadLocal<T>\` copies the **parent** thread's current value into a **child** thread **at the moment the child is created**, so ambient context (a request id, a trace id) flows automatically to threads you spawn. The copy is **shallow** — the child gets the same reference, not a deep clone.
+
+The pitfall is **thread pools**. A pool's workers are created **once**, up front, then **reused** across countless unrelated tasks:
+
+| Step | What the worker holds |
+|------|-----------------------|
+| Pool starts | context inherited from whoever *created the pool* |
+| Task A (request 1) submitted | still the **pool-creation** context, not request 1's |
+| Task B (request 2) submitted | **stale** context left over from before |
+
+Inheritance fires at pool-thread creation, never at submit time — so workers see stale or leaked context and can bleed one request's data into another.
+
+:::gotcha
+Don't rely on \`InheritableThreadLocal\` to carry per-task context into a pool. Pass context explicitly (capture it in the task), or use **\`ScopedValue\`** (Java 21) which is built for safe, bounded inheritance.
+:::`,
+  },
+  {
+    id: 'mt-basics-restart-thread',
+    question: 'Can you restart a Thread after it has finished running?',
+    difficulty: 'Easy',
+    category: 'Thread Basics',
+    tags: ['lifecycle', 'restart', 'illegalthreadstateexception'],
+    answer: `No. A \`Thread\` is **single-use** — its lifecycle runs one way, NEW → TERMINATED, and never loops back. Calling \`start()\` on a thread that has **already been started** (still running or long dead) throws \`IllegalThreadStateException\`.
+
+\`\`\`java
+Thread t = new Thread(task);
+t.start();
+t.join();
+t.start();   // IllegalThreadStateException — cannot reuse
+\`\`\`
+
+To run the work again, either create a **new \`Thread\`**, or — far better — submit the task to an \`ExecutorService\`, which keeps a **pool of reusable worker threads** under the hood so *you* never restart a thread at all.
+
+:::key
+Threads aren't reusable; tasks are. Reuse the *task* (\`Runnable\`/\`Callable\`) by resubmitting it to a pool, and let the executor manage thread lifecycles.
+:::`,
+  },
+  {
+    id: 'mt-basics-wait-requires-monitor',
+    question: 'Why must wait() and notify() be called while holding the object monitor?',
+    difficulty: 'Medium',
+    category: 'Thread Basics',
+    tags: ['wait', 'notify', 'monitor'],
+    answer: `\`wait()\`, \`notify()\`, and \`notifyAll()\` live on \`Object\` and require the caller to **already own that object's intrinsic lock** — to be inside a \`synchronized\` block on it. Call them without the monitor and you get \`IllegalMonitorStateException\`.
+
+The reason is **atomicity against lost wakeups**. \`wait()\` must, in one indivisible step, **release the monitor and park** the thread on the monitor's wait-set. Holding the lock is what lets the JVM check your condition and go to sleep without another thread slipping a \`notify()\` in between:
+
+\`\`\`java
+synchronized (lock) {
+  while (!condition) {   // always a loop, never a bare if
+    lock.wait();         // atomically releases lock + parks
+  }
+  // re-acquired the lock here; condition now holds
+}
+\`\`\`
+
+Because **every** Java object carries a monitor and wait-set, any object can serve as a condition variable — which is exactly why these methods are defined on \`Object\`.
+
+:::key
+No monitor, no wait-set coordination — hence \`IllegalMonitorStateException\`. Always \`wait()\` inside \`synchronized\`, and always in a \`while\` loop that re-checks the condition.
+:::`,
+  },
+  {
+    id: 'mt-basics-callable-runnable-exceptions',
+    question: 'How does exception handling differ between Runnable and Callable?',
+    difficulty: 'Medium',
+    category: 'Thread Basics',
+    tags: ['runnable', 'callable', 'exception'],
+    answer: `\`Runnable.run()\` is declared with **no \`throws\`**, so it **cannot propagate checked exceptions** — you must catch them inside \`run()\` and rewrap as unchecked (\`RuntimeException\`). \`Callable.call()\` is declared \`throws Exception\`, so a checked failure can escape naturally.
+
+In an executor, where that failure lands also differs:
+
+| Task type | On \`execute()\` | On \`submit()\` |
+|-----------|------------------|------------------|
+| \`Runnable\` unchecked throw | uncaught-exception handler | captured in the \`Future\` |
+| \`Callable\` throw | n/a (\`execute\` takes only \`Runnable\`) | wrapped as \`ExecutionException\` from \`get()\` |
+
+\`\`\`java
+Future<Integer> f = pool.submit(() -> { throw new IOException("boom"); });
+try { f.get(); }
+catch (ExecutionException e) { Throwable cause = e.getCause(); }  // the real IOException
+\`\`\`
+
+:::senior
+Use \`Callable\` when a task can **fail meaningfully** — it forces callers to reckon with the exception via \`Future.get()\`. And always inspect the \`Future\`: a \`submit()\`-ed failure is invisible until you do.
+:::`,
+  },
 ];
 
 export default questions;

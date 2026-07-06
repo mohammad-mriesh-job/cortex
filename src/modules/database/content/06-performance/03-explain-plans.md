@@ -24,17 +24,13 @@ skill — you stop guessing and start *seeing*.
 ```mermaid
 flowchart TD
   P["Predicate: WHERE x = ?"] --> A{"Index on x?"}
-  A -->|"No"| SEQ["Seq scan"]
-  A -->|"Yes"| B{"Are all needed<br/>columns in the index?"}
-  B -->|"Yes"| IO["Index-only scan"]
-  B -->|"No"| C{"How many rows match?"}
-  C -->|"Few"| IDX["Index scan<br/>+ per-row table hop"]
-  C -->|"Many (but not most)"| BMP["Bitmap index scan<br/>read pages in order"]
-  C -->|"Most of the table"| SEQ
-  class IO,IDX good;
-  class SEQ bad;
-  classDef good fill:#2e7d32,stroke:#1b5e20,color:#fff;
-  classDef bad fill:#b23b3b,stroke:#7f1d1d,color:#fff;
+  A -->|No| SEQ["Seq scan"]
+  A -->|Yes| B{"All needed columns in the index?"}
+  B -->|Yes| IO["Index-only scan (fastest)"]
+  B -->|No| C{"How many rows match?"}
+  C -->|few| IDX["Index scan + per-row table hop"]
+  C -->|"many, but not most"| BMP["Bitmap index scan — read pages in order"]
+  C -->|"most of the table"| SEQ
 ```
 
 ## Join algorithms — how two tables are combined
@@ -48,13 +44,58 @@ flowchart TD
 ```mermaid
 flowchart TD
   J["JOIN on a = b"] --> E{"Equality join?"}
-  E -->|"No (range/inequality)"| NL["Nested loop"]
-  E -->|"Yes"| S{"Both inputs<br/>sorted on the key?"}
-  S -->|"Yes"| MJ["Merge join"]
-  S -->|"No"| I{"One side small<br/>+ indexed?"}
-  I -->|"Yes"| NL2["Nested loop<br/>(index probe)"]
-  I -->|"No"| HJ["Hash join"]
+  E -->|"no — range or inequality"| NL["Nested loop"]
+  E -->|yes| S{"Both inputs sorted on the key?"}
+  S -->|yes| MJ["Merge join — zip the sorted streams"]
+  S -->|no| I{"One side small and inner side indexed?"}
+  I -->|yes| NL2["Nested loop with index probe"]
+  I -->|no| HJ["Hash join — build small side, probe large"]
 ```
+
+### Watch a hash join run — build, then probe
+
+The two-phase shape is why hash joins scale: each input is read **once**.
+
+```walkthrough
+title: Hash join — build phase, then probe phase
+code: |
+  -- orders JOIN customers ON o.customer_id = c.id
+  BUILD: scan customers (smaller side)
+         bucket = hash(c.id), store the row there
+  PROBE: scan orders (larger side)
+         bucket = hash(o.customer_id), check it
+         same key in bucket -> emit joined row
+steps:
+  - text: '**Build:** read customer `id=5`, hash it → bucket 1. The boxes are the in-memory hash table''s buckets.'
+    array: ['', '5', '', '']
+    highlight: [1]
+    line: 3
+  - text: '**Build:** customer `id=12` hashes to bucket 0.'
+    array: ['12', '5', '', '']
+    highlight: [0]
+    line: 3
+  - text: '**Build:** customer `id=7` → bucket 3. Build done — one pass over the small side, O(m) memory.'
+    array: ['12', '5', '', '7']
+    highlight: [3]
+    line: 3
+  - text: '**Probe:** order with `customer_id=7` hashes to bucket 3 → key matches → **emit the joined row**. O(1) per probe.'
+    array: ['12', '5', '', '7']
+    highlight: [3]
+    pointers: { 3: 'match' }
+    line: 6
+  - text: '**Probe:** order with `customer_id=8` hashes to bucket 0 — bucket holds `12`, keys differ → **no match**, row discarded. Total cost: one pass over each input, O(n + m).'
+    array: ['12', '5', '', '7']
+    highlight: [0]
+    pointers: { 0: 'miss' }
+    line: 5
+```
+
+:::gotcha
+The build side must fit in **work memory** (`work_mem` in Postgres, hash area in others). When
+it doesn't, the engine spills partitions to disk (Grace hash join) and the plan's cheap-looking
+hash join quietly triples its I/O. That's why the optimizer always builds on the **smaller** input
+— and why a wildly wrong row estimate can make it build on the wrong side.
+:::
 
 ## Reading an annotated plan
 
@@ -119,6 +160,23 @@ operation; the deepest nodes run first. Senior tells: a `Seq Scan` on a huge tab
 selective filter, a `Nested Loop` with a large outer row count, or `actual rows` wildly above
 `rows` — each points at a fix (add an index, refresh stats, or rewrite the query).
 :::
+
+```flashcards
+title: Plan-reading recall
+cards:
+  - front: 'Order to read a plan tree?'
+    back: '**Bottom-up / inside-out** — the most-indented node runs first and feeds its parent.'
+  - front: 'Nested loop join wins when…'
+    back: 'The **outer side is small** and the inner side has an **index** on the join key — cost is outer rows × one indexed probe.'
+  - front: 'Hash join wins when…'
+    back: 'Both inputs are **large and unsorted** and the join is **equality** — one pass each, O(n + m), needs memory for the build side.'
+  - front: 'Merge join wins when…'
+    back: 'Both inputs are **already sorted** on the join key (e.g. both read from B-tree indexes) — zip them in one pass.'
+  - front: 'What does `cost=0.42..8.61` mean?'
+    back: 'Startup cost .. total cost in **arbitrary planner units** — not milliseconds, only comparable within one plan.'
+  - front: 'Estimated `rows=50`, `actual rows=500000` — diagnosis?'
+    back: '**Stale statistics.** Run `ANALYZE` (Postgres) / `ANALYZE TABLE` (MySQL) so the planner sees reality.'
+```
 
 ## Check yourself
 

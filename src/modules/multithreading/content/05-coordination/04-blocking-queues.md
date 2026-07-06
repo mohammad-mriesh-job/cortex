@@ -17,13 +17,13 @@ along three axes: **bounded or not**, **ordering**, and **whether items are stor
 
 ```mermaid
 flowchart TD
-  Start[Need a BlockingQueue] --> Q1{Items become ready at a time?}
-  Q1 -->|Yes, delay or schedule| DQ[DelayQueue]
-  Q1 -->|No| Q2{Consume by priority, not arrival?}
+  Start[Need a BlockingQueue] --> Q1{"Items become ready at a time?"}
+  Q1 -->|"Yes, delay or schedule"| DQ[DelayQueue]
+  Q1 -->|No| Q2{"Consume by priority, not arrival?"}
   Q2 -->|Yes| PBQ[PriorityBlockingQueue]
-  Q2 -->|No| Q3{Direct handoff, zero buffering?}
-  Q3 -->|Yes, thread to thread| SQ[SynchronousQueue]
-  Q3 -->|No| Q4{Fixed bound for backpressure?}
+  Q2 -->|No| Q3{"Direct handoff, zero buffering?"}
+  Q3 -->|"Yes, thread to thread"| SQ[SynchronousQueue]
+  Q3 -->|No| Q4{"Fixed bound for backpressure?"}
   Q4 -->|Yes, predictable memory| ABQ[ArrayBlockingQueue]
   Q4 -->|No, high throughput| LBQ[LinkedBlockingQueue]
 ```
@@ -98,6 +98,25 @@ everything, so `maximumPoolSize` is **ignored** and the pool never grows past co
 `PriorityBlockingQueue` and `DelayQueue` are unbounded, so they cannot backpressure either — bound your
 producers another way.
 :::
+
+## Drill: queues and method families
+
+```flashcards
+title: BlockingQueue recall
+cards:
+  - front: '`ArrayBlockingQueue`'
+    back: '**Bounded** FIFO over a fixed array, one lock for both ends. The queue for real **backpressure** and predictable memory.'
+  - front: '`LinkedBlockingQueue`'
+    back: 'FIFO over linked nodes, **two locks** (put vs take) for throughput. **Default constructor is unbounded** (`Integer.MAX_VALUE`) — pass a capacity or risk OOM.'
+  - front: '`SynchronousQueue`'
+    back: '**Zero capacity** — every `put` must rendezvous with an active `take`. Direct thread-to-thread handoff; powers `newCachedThreadPool`.'
+  - front: '`PriorityBlockingQueue`'
+    back: '**Unbounded** binary heap ordered by comparator — consume most-important-first. No backpressure, and equal-priority order is unspecified.'
+  - front: '`DelayQueue`'
+    back: '**Unbounded** heap of `Delayed` items; `take` returns an item only after its delay expires. The structure behind schedulers and timeout maps.'
+  - front: 'The four method families for full/empty'
+    back: '**Block**: `put`/`take`. **Timeout**: `offer(e, t, u)`/`poll(t, u)`. **Return value**: `offer` → false / `poll` → null. **Throw**: `add` → `IllegalStateException` / `remove` → `NoSuchElementException`.'
+```
 
 ## Check yourself
 

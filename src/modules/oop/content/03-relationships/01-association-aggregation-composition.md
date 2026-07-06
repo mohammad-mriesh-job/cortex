@@ -97,6 +97,54 @@ for it. The *only* thing that distinguishes them is the **lifecycle contract** y
 does the part outlive the whole, and can it be shared?
 :::
 
+## Where you meet each one in real code
+
+- **Composition** — `HashMap` and its internal `Node[] table`: created inside, never handed out,
+  dies with the map. `String` and its backing array. Your `Invoice` and its `InvoiceLine`s.
+- **Aggregation** — a Spring service holding an injected `Clock` or `MeterRegistry`: the
+  container built it, many beans share it, and it outlives any one of them. Injected singletons
+  are aggregation almost by definition.
+- **Association** — a collaborator used per call and forgotten: `order.total(pricingService)`.
+
+Composition's "exclusive, lifecycle-bound" promise has two practical consequences reviewers
+check:
+
+- **Don't leak the part.** A getter returning the internal `List<Room>` reference silently turns
+  composition into aggregation — outsiders now hold your parts. Return `List.copyOf(rooms)` or an
+  unmodifiable view.
+- **Copying the whole means copying the parts.** A composed object needs a **deep** copy; an
+  aggregating object shares its parts, so a shallow copy is correct. Aggregation vs composition
+  is the deep-vs-shallow-copy question in disguise.
+
+:::senior
+Strong answers connect the arrows to **navigability and change cost**: every association is a
+dependency direction — `Order --> PricingService` means pricing changes can break `Order`, never
+the reverse. Bidirectional links double the coupling and invite serialization cycles and
+stale-side bugs, so keep associations one-way unless the use case truly needs both directions.
+In JPA the distinction becomes physical: composition maps to `CascadeType.ALL` +
+`orphanRemoval = true`; aggregation must **not** cascade deletes, or disbanding a `Team` erases
+`Player` rows other teams still reference.
+:::
+
+## Arrow recall
+
+```flashcards
+title: 'UML relationship arrows'
+cards:
+  - front: '`A --> B` — plain arrow'
+    back: '**Association** — A uses / knows B (holds a reference). No lifecycle claim.'
+  - front: '`A o-- B` — hollow diamond'
+    back: '**Aggregation** — A has B; B is shared and outlives A. The diamond sits on the WHOLE.'
+  - front: '`A *-- B` — filled diamond'
+    back: '**Composition** — A owns B exclusively; B dies with A. The delete test answers yes.'
+  - front: '`A ..> B` — dashed arrow'
+    back: '**Dependency** — A temporarily uses B (parameter, local, return type). Weaker than association: no field held.'
+  - front: '`A <|-- B` — hollow triangle, solid line'
+    back: '**Inheritance** — B extends A. The triangle always points at the parent.'
+  - front: '`A <|.. B` — hollow triangle, dashed line'
+    back: '**Realization** — B implements interface A.'
+```
+
 ## Check yourself
 
 ```quiz

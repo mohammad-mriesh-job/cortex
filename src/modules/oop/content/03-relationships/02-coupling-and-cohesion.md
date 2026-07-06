@@ -16,15 +16,15 @@ related** (high cohesion). The mantra: **low coupling, high cohesion**.
 
 ```mermaid
 flowchart LR
-    subgraph GOOD["✅ Aim for this"]
+    subgraph GOOD["Aim for this"]
       direction TB
-      A["Low Coupling<br/>modules barely touch"]
-      B["High Cohesion<br/>one class = one job"]
+      A["Low coupling — modules barely touch"]
+      B["High cohesion — one class, one job"]
     end
-    subgraph BAD["❌ Avoid this"]
+    subgraph BAD["Avoid this"]
       direction TB
-      C["Tight Coupling<br/>change one, break many"]
-      D["Low Cohesion<br/>one class = many jobs"]
+      C["Tight coupling — change one, break many"]
+      D["Low cohesion — one class, many jobs"]
     end
 ```
 
@@ -101,6 +101,32 @@ tabs:
 A string of `.getX().getY().getZ()` is a **train wreck** — the classic Law of Demeter
 smell. Each `.` past the first is a new object you've quietly coupled yourself to.
 :::
+
+### Not every chain is a violation
+
+The law is about reaching through *object structure*, not about counting dots. A fluent builder
+(`builder.name("Ada").age(36).build()`) returns **itself** on each call — one object, no
+strangers. A stream pipeline (`list.stream().filter(...).map(...)`) transforms values rather than
+navigating a graph. Flagging those in review as Demeter violations is a classic junior mistake;
+the real smell is **navigating another object's composition** (`order.getCustomer().getWallet()`),
+because it freezes that internal structure into every caller.
+
+## Grading coupling — not all edges are equal
+
+The classic taxonomy, worst to best — useful vocabulary in design reviews:
+
+| Grade | Meaning | Example |
+|--|--|--|
+| Content | reaching into another module's internals | reflection hacks, `public` mutable fields |
+| Common | sharing global mutable state | a static config map several classes write |
+| Control | passing a flag that switches the callee's logic | `render(data, true /* isAdmin */)` |
+| Stamp | passing a fat object where a piece is needed | passing `HttpServletRequest` to compute a total |
+| Data | passing exactly the values needed | `total(List<LineItem> items)` |
+
+Interviewers rarely ask for the list; they ask you to **recognise** the middle grades in code:
+a boolean parameter (control coupling → split the method), or a method that takes the whole
+request object to read one header (stamp coupling → pass the header). Naming the grade while
+refactoring is what makes the answer senior.
 
 :::senior
 Coupling and cohesion are two sides of the same coin: **push cohesion up and coupling tends

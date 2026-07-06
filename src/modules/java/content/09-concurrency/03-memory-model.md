@@ -33,6 +33,21 @@ If action **A** *happens-before* action **B**, then A's memory effects are visib
 
 Crucially, **without** a happens-before edge, there is **no** visibility guarantee — even if the wall-clock time clearly separates the two actions.
 
+Transitivity is what makes the edges powerful. One `volatile` flag publishes *all* plain writes that preceded it:
+
+```mermaid
+flowchart LR
+    subgraph TA["Thread A"]
+        A1["data = 42 (plain write)"] --> A2["ready = true (volatile write)"]
+    end
+    subgraph TB["Thread B"]
+        B1["reads ready == true (volatile read)"] --> B2["reads data: guaranteed 42"]
+    end
+    A2 -->|"happens-before"| B1
+```
+
+Program order chains `data = 42` before the volatile write; the volatile edge chains it to B's read; program order carries it to B's read of `data`. Remove the `volatile` and the whole chain collapses — B may see `ready == true` yet `data == 0`.
+
 ## Visibility: the stale-flag bug
 
 ```java

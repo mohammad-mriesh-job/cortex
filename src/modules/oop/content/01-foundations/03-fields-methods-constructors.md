@@ -119,6 +119,70 @@ Order of a `new`: memory is allocated and fields set to **defaults** (`0`, `fals
 your constructor overwrites it — relevant if a method is called mid-construction.
 :::
 
+## Constructor chaining across a hierarchy
+
+With inheritance the order gets stricter: **every constructor first runs its parent's
+constructor** — explicitly via `super(...)` or implicitly — so initialisation flows from the top
+of the hierarchy down. Step through exactly what runs when:
+
+```walkthrough
+title: 'new Car() — what runs, in what order'
+code: |
+  class Vehicle {
+    int wheels = 4;                       // Vehicle field initialiser
+    Vehicle() { System.out.println("Vehicle ctor"); }
+  }
+
+  class Car extends Vehicle {
+    String brand = "generic";             // Car field initialiser
+    Car() {
+      super();                            // inserted by compiler if omitted
+      System.out.println("Car ctor");
+    }
+  }
+
+  Car c = new Car();
+steps:
+  - text: '`new Car()` allocates the WHOLE object — inherited fields included — and zeroes it: `wheels=0`, `brand=null`. No constructor code has run yet.'
+    line: 14
+  - text: '`Car()` starts, but its first action is `super()` — a constructor always chains to its parent before running its own body.'
+    line: 9
+  - text: 'Inside `Vehicle()`: first Vehicle''s field initialisers run → `wheels = 4`. Field initialisers execute as part of their class''s constructor, right after its own super-call.'
+    line: 2
+  - text: 'Then Vehicle''s constructor body prints `"Vehicle ctor"`. The Vehicle layer of the object is now fully initialised.'
+    line: 3
+  - text: 'Control returns to `Car()`. Now CAR''s field initialisers run → `brand = "generic"`. Until this moment, `brand` was still `null`.'
+    line: 7
+  - text: 'Finally Car''s constructor body prints `"Car ctor"`. Full order: allocate + defaults → super chain → each class''s field inits → its body, top-down.'
+    line: 10
+```
+
+:::gotcha
+Never call an **overridable method** from a constructor. If `Vehicle()`'s body calls a method that
+`Car` overrides, the override runs at step 4 — **before** `Car`'s fields are initialised (step 5)
+— so it sees `brand == null`. This produces `NullPointerException`s that appear only for
+subclasses and only during construction. Keep constructor-called methods `private` or `final`.
+:::
+
+### The rules interviews check
+
+- `this(...)` or `super(...)` must be the **first statement** of a constructor, and you can have
+  at most one of them.
+- Write neither and the compiler inserts `super()` — which **fails to compile** if the parent has
+  no accessible no-arg constructor. This is the classic "why won't my subclass compile?" question.
+- A `final` field must be assigned **exactly once** — at its declaration, in an instance
+  initialiser block, or in *every* constructor.
+- Constructors are not inherited and cannot be `abstract`, `static`, or `final`.
+- Since Java 16, a **record** (`record Point(int x, int y) {}`) generates the constructor,
+  accessors, `equals`, `hashCode`, and `toString` — the modern cure for data-class boilerplate.
+
+:::key
+Fields hold state, methods act on it, constructors initialise it. On `new`: memory is zeroed →
+constructors chain **top-down** (super first) → each class runs its field initialisers, then its
+constructor body. `this` disambiguates fields from parameters; `this(...)` delegates between
+overloads; both `this(...)` and `super(...)` must come first.
+:::
+
 ## Check yourself
 
 ```quiz

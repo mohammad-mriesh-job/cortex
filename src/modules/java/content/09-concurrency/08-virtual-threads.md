@@ -87,6 +87,45 @@ This eliminates leaked tasks and orphaned cancellations — the concurrent equiv
 Virtual threads change the default architecture for server-side I/O: the old defence of "share a precious thread pool" becomes unnecessary, so frameworks move to thread-per-request again. But they are **not** a parallelism speedup for CPU work and **not** a way to throttle load — keep CPU pools for computation and a `Semaphore` for rate-limiting. Audit hot paths for `synchronized` around I/O on Java 21, and keep per-request state in `ScopedValue` rather than `ThreadLocal`.
 :::
 
+## Check yourself
+
+```quiz
+title: 'Virtual threads'
+questions:
+  - q: 'On Java 21, a virtual thread performs a JDBC call inside a `synchronized` method. What can happen under load?'
+    options:
+      - 'Nothing special — blocking always unmounts a virtual thread.'
+      - text: '**Pinning**: the virtual thread cannot unmount inside `synchronized`, so it holds its carrier for the whole blocking call; enough pinned threads stall the entire application.'
+        correct: true
+      - 'The JVM throws `PinnedThreadException`.'
+      - 'The call is transparently made asynchronous.'
+    explain: 'On Java 21, blocking inside a monitor (or a native frame) pins the carrier. Replace `synchronized` around blocking I/O with `ReentrantLock`, and diagnose with `-Djdk.tracePinnedThreads=full`. JEP 491 (JDK 24) removed most `synchronized` pinning.'
+  - q: 'You want at most 10 concurrent calls to a fragile downstream API from code running on virtual threads. What is the idiomatic limit?'
+    options:
+      - 'A fixed pool of 10 virtual threads.'
+      - text: 'A `Semaphore(10)` around the call — virtual threads are not pooled; concurrency is limited with synchronizers, not thread counts.'
+        correct: true
+      - 'A `ThreadPoolExecutor` with max=10 platform threads.'
+      - '`Thread.sleep` based rate limiting.'
+    explain: 'Pooling virtual threads defeats their purpose (they are the cheap resource, created per task). To cap concurrent access to a resource, acquire a semaphore permit around the call — millions of virtual threads can wait on it cheaply.'
+  - q: 'Which workload gains essentially nothing from virtual threads?'
+    options:
+      - 'A server handling 50,000 concurrent HTTP requests that each wait on a database.'
+      - text: 'A CPU-bound matrix multiplication using all 16 cores.'
+        correct: true
+      - 'A crawler blocked on thousands of slow sockets.'
+      - 'A chat server holding one blocked read per connection.'
+    explain: 'Virtual threads multiply how many threads can *wait* cheaply — they do not add CPU. Compute-bound work is still limited by core count, where a small platform-thread pool (like ForkJoinPool) is the right tool.'
+  - q: 'What happens when a virtual thread blocks on a socket read?'
+    options:
+      - 'Its carrier OS thread blocks with it until the read completes.'
+      - text: 'The JVM **unmounts** it — its stack moves to the heap, the carrier is freed to run other virtual threads, and it is remounted (possibly on a different carrier) when the I/O completes.'
+        correct: true
+      - 'The read is rejected — virtual threads cannot do blocking I/O.'
+      - 'A new carrier thread is spawned for each blocked virtual thread.'
+    explain: 'This mount/unmount dance is the whole trick: blocked virtual threads consume no OS thread, so a handful of carriers (about one per core) can serve millions of mostly-waiting tasks.'
+```
+
 :::key
 Virtual threads are cheap, JVM-scheduled threads that **mount** onto a small pool of **carrier** (OS) threads and **unmount** on blocking I/O, freeing the carrier. They let plain sequential blocking code scale to millions of concurrent I/O-bound tasks — but offer nothing for CPU-bound work. Don't pool them; create one per task. Watch for **pinning** under `synchronized` (use `ReentrantLock` on Java 21) and heavy `ThreadLocal` use. Structured concurrency scopes a group of subtasks so failures and cancellation propagate cleanly.
 :::

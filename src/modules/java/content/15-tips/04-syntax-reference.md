@@ -233,6 +233,16 @@ finally { ... }                              // always runs (cleanup only)
 | Terminal (eager) | `forEach`, `collect`, `reduce`, `count`, `anyMatch`/`allMatch`/`noneMatch`, `findFirst`, `min`/`max`, `toList()` |
 | Collectors | `toList`, `toSet`, `toMap`, `groupingBy`, `partitioningBy`, `joining`, `counting`, `summingInt` |
 
+A stream is a *lazy* pipeline: intermediate ops just build up a plan, and **nothing runs until a terminal op** pulls elements through it:
+
+```mermaid
+flowchart LR
+    A["Source: stream() / Stream.of / IntStream.range"] --> B["Intermediate ops (lazy): filter, map, sorted"]
+    B --> C["Nothing runs yet — pipeline only described"]
+    C --> D["Terminal op (eager): collect / reduce / forEach"]
+    D --> E["Now the whole pipeline executes in one pass"]
+```
+
 ```java
 List<String> adults = people.stream()
     .filter(p -> p.age() >= 18)
@@ -252,6 +262,34 @@ Streams aren't always the answer. For a simple transform a `for` loop is clearer
 :::tip
 Use `var` only when the right-hand side already makes the type obvious (`var list = new ArrayList<String>()`). Avoid it when the type is non-obvious (`var x = service.fetch()`), where naming the type aids the reader.
 :::
+
+## Check yourself
+
+```quiz
+title: Syntax essentials
+questions:
+  - q: 'How does the arrow `switch` (`case X ->`) differ from the classic colon form on fall-through?'
+    options:
+      - text: 'The arrow form never falls through; the colon form falls through unless you `break`'
+        correct: true
+      - 'Both fall through identically'
+      - 'The arrow form always falls through'
+    explain: 'Arrow labels run exactly one branch — no `break` needed and no accidental fall-through. Mixing arrow and colon styles in one switch is a compile error; prefer arrows for new code.'
+  - q: 'When is `var` the right choice for a local variable?'
+    options:
+      - text: 'When the right-hand side already makes the type obvious, e.g. `var list = new ArrayList<String>()`'
+        correct: true
+      - 'For every local, to save typing'
+      - 'For fields and method parameters too'
+    explain: '`var` (locals only, Java 10+) aids readability when the initializer names the type. Avoid it when the type is non-obvious (`var x = service.fetch()`), where spelling out the type helps the reader.'
+  - q: 'What does a `try`-with-resources block guarantee?'
+    options:
+      - text: 'Each resource in the header is closed automatically, in reverse order, even when the body throws'
+        correct: true
+      - 'That the body never throws'
+      - 'That the resource is reopened on failure'
+    explain: 'Any `AutoCloseable` opened in the `try(...)` header is closed on exit — normally or via exception — and a close-time failure becomes a *suppressed* exception rather than masking the original. It replaces error-prone manual `close()` in `finally`.'
+```
 
 :::key
 Declare with the interface and instantiate the implementation; use `equals` (not `==`) for content; the arrow `switch` is exhaustive and never falls through; `record` gives you `equals`/`hashCode`/`toString` free; lambdas implement single-method interfaces; and `try`-with-resources auto-closes anything `AutoCloseable`.

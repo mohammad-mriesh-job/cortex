@@ -130,6 +130,39 @@ flowchart LR
 Prefer `List<T>` (e.g. `ArrayList`) for almost all application code — it resizes, has a rich API, and plays well with streams and generics. Reach for raw arrays when you need primitive storage without boxing overhead, a fixed buffer in hot code, or to interface with APIs that demand them (`String[] args`, `byte[]` I/O).
 :::
 
+```quiz
+title: Check yourself
+questions:
+  - q: 'What happens with `int[][] j = new int[3][]; j[0][0] = 1;`?'
+    options:
+      - 'It works — rows default to length 0'
+      - text: '`NullPointerException` — the three rows are `null` until you assign arrays to them'
+        correct: true
+      - 'Compile error — jagged arrays need explicit row sizes'
+    explain: '`new int[3][]` allocates only the outer array; each row is a reference defaulting to `null`. You must do `j[0] = new int[5];` before touching `j[0][0]`.'
+  - q: 'What does `System.out.println(new int[]{1, 2, 3});` print?'
+    options:
+      - '`[1, 2, 3]`'
+      - text: 'Something like `[I@1b6d3586` — type signature plus hash'
+        correct: true
+      - '`{1, 2, 3}`'
+    explain: 'Arrays don''t override `toString()`, so you get `Object`''s default. Use `Arrays.toString(a)` — and `Arrays.deepToString` for nested arrays.'
+  - q: 'You call `Arrays.binarySearch(a, key)` on an **unsorted** array. What do you get?'
+    options:
+      - 'It sorts a copy first, then searches — always correct'
+      - '`-1` whenever the key exists but is out of place'
+      - text: 'An undefined result — binary search''s contract requires a sorted array'
+        correct: true
+    explain: 'Binary search halves the range assuming order; on unsorted data the result is unspecified (it may "find" nothing that exists, or return a wrong index). Sort first, or use a linear scan.'
+  - q: 'Which expression gets an array''s element count?'
+    options:
+      - '`a.length()`'
+      - text: '`a.length`'
+        correct: true
+      - '`a.size()`'
+    explain: '`length` is a **field** on arrays (no parentheses). `length()` is a method on `String`; `size()` is a method on collections. Mixing these up is a classic compile-error trio.'
+```
+
 :::key
 - Arrays are **fixed-size**, single-type, and zero-indexed; `length` is a *field*, not a method.
 - `new` fills elements with defaults (`0`, `false`, `'\u0000'`, `null`).

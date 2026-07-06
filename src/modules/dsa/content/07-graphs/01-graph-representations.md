@@ -115,6 +115,19 @@ neighbors, and the matrix stores the weight in place of `1` (using infinity or a
 "no edge"). Same layouts, one extra field.
 :::
 
+There is a third form worth naming: the plain **edge list** — just `[(u, v, w), ...]`. It is the
+input format most problems hand you, and it is exactly what **Kruskal's MST** wants (sort the
+edges, union the endpoints). Convert it to an adjacency list in O(E) before running BFS/DFS/
+Dijkstra; only keep it raw when the algorithm iterates *edges* rather than *neighbors*.
+
+:::gotcha
+Two setup bugs cause most wrong answers before the algorithm even runs. **Forgetting the reverse
+edge** on an undirected graph (`adj.get(v).add(u)`) makes half the connections invisible — BFS
+finds mysteriously unreachable vertices. And **isolated vertices exist**: build the list with a
+slot for every `0..V-1`, and loop over all vertices (not just edge endpoints) when counting
+components, or you silently drop the loners.
+:::
+
 ## Check yourself
 
 ```quiz

@@ -16,13 +16,12 @@ capsule: the medicine (data) is sealed inside, you interact with the shell.
 
 ```mermaid
 flowchart LR
-    subgraph Capsule["🔒 BankAccount"]
+    subgraph Capsule["BankAccount — the capsule"]
       direction TB
-      P["- balance : double  (private)"]:::hidden
+      P["- balance : double (private)"]
     end
-    Caller(["Outside code"]) -->|deposit / withdraw / getBalance| Capsule
-    Caller -.->|"account.balance ❌"| P
-    classDef hidden fill:#fde,stroke:#c33,stroke-dasharray:4;
+    Caller(["Outside code"]) -->|"deposit / withdraw / getBalance"| Capsule
+    Caller -.->|"account.balance — blocked"| P
 ```
 
 The field is walled off; only the public methods reach in. Direct access is blocked.
@@ -121,6 +120,23 @@ handing out references to internal mutable state.
 `getList()` that returns your internal `List` reference **breaks encapsulation** — callers can
 mutate it behind your back. Return `List.copyOf(list)` or `Collections.unmodifiableList(list)`.
 :::
+
+## Encapsulation in the JDK — and in code review
+
+`String` is the canonical example: its `char` data is private and final, there is no setter, and
+every "mutation" (`toUpperCase()`, `substring()`) returns a **new** string — which is why strings
+are safe to share across threads and safe as `HashMap` keys. `LocalDate` and the rest of
+`java.time` follow the same discipline, precisely because their mutable predecessors (`Date`,
+`Calendar`) caused decades of aliasing bugs. At the language level, Java 9+ **modules** extend the
+idea one level up: a package can be internal to a module, hiding entire classes the way `private`
+hides fields.
+
+In code review, encapsulation problems rarely look like `public double balance`. They look like:
+
+- a getter returning an internal `List`/`Map`/array reference (the leak above),
+- a setter with no validation on a field that clearly has rules (`setAge(-3)` accepted),
+- **feature envy** — a caller doing `if (order.getStatus() == PAID && order.getItems().size() > 0)`
+  and then mutating the order from outside, instead of `order.ship()` owning those rules.
 
 ## Encapsulation vs Abstraction
 

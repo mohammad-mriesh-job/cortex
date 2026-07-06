@@ -134,6 +134,39 @@ if (o instanceof String) {
 }
 ```
 
+```quiz
+title: Check yourself
+questions:
+  - q: 'What does `byte b = (byte) 300;` store in `b`?'
+    options:
+      - '`127` — the cast clamps to the max byte value'
+      - text: '`44` — the cast keeps only the low 8 bits'
+        correct: true
+      - 'Nothing — it throws `ArithmeticException`'
+    explain: 'Narrowing never clamps or throws: 300 is `100101100` in binary; keeping the low 8 bits (`00101100`) gives 44. Silent bit truncation is the whole danger of narrowing casts.'
+  - q: 'Which prints `true`?'
+    options:
+      - '`Integer a = 200, b = 200; System.out.println(a == b);`'
+      - text: '`Integer a = 100, b = 100; System.out.println(a == b);`'
+        correct: true
+      - 'Both — autoboxed equal values are always the same object'
+    explain: '`Integer.valueOf` caches −128..127, so two boxed 100s are the *same object* and `==` happens to work; boxed 200s are distinct objects. That inconsistency is why you must always use `.equals()` on wrappers.'
+  - q: 'What does `double avg = 7 / 2;` assign to `avg`?'
+    options:
+      - '`3.5`'
+      - text: '`3.0` — integer division happens first, then the result widens'
+        correct: true
+      - 'Compile error — you must cast explicitly'
+    explain: 'The expression `7 / 2` is evaluated in `int` arithmetic (→ `3`) *before* the assignment widens it to `double`. Write `7 / 2.0` or `(double) 7 / 2` to get `3.5`.'
+  - q: '`Integer count = null; int n = count;` — what happens?'
+    options:
+      - '`n` becomes `0`, the default int value'
+      - 'Compile error — you cannot assign a wrapper to a primitive'
+      - text: '`NullPointerException` at runtime — unboxing calls `count.intValue()` on null'
+        correct: true
+    explain: 'Unboxing compiles to `count.intValue()`. On a null reference that call NPEs — a favourite production bug when a nullable DB column is mapped to a primitive field.'
+```
+
 :::key
 - **Widening** is implicit and safe; **narrowing** needs an explicit `(cast)` and may lose data.
 - Narrowing and overflow keep the low bits and wrap silently — use `Math.*Exact` when that matters.

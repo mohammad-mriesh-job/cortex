@@ -8,9 +8,13 @@ summary: Create new objects by cloning an existing prototype instead of instanti
 tags: prototype, creational, design patterns, clone, deep copy
 ---
 
-**Prototype** creates new objects by **copying an existing instance** (the prototype) rather than
-building from scratch. Useful when construction is expensive, or when you need many near-identical
-objects configured at runtime.
+Sometimes constructing an object is the expensive part: it loads defaults from disk, parses a
+template, or was configured through a dozen runtime steps you cannot repeat. When you need many
+near-identical copies of such an object — game entities, document templates, pre-configured
+clients — re-running construction for each one is wasteful, and the code doing the copying often
+cannot even *name* the concrete class it should instantiate. **Prototype** creates new objects by
+**copying an existing instance** (the prototype) rather than building from scratch: the copy comes
+out pre-configured, and the caller never touches a constructor.
 
 ## Structure
 
@@ -109,6 +113,58 @@ Effective Java (Item 13) advises avoiding `Cloneable` entirely in new code — u
 or copy factory. The Prototype *pattern* is still valid; just don't implement it via the language's
 `clone()` plumbing. Serialization-based deep copy works but is slow and fragile.
 :::
+
+## A prototype registry
+
+The pattern's production form: a registry of named, pre-configured prototypes. Client code asks by
+key and receives a fresh copy — creation without `new`, without knowing the concrete type, and
+without re-doing the configuration.
+
+```java
+class DocumentRegistry {
+  private final Map<String, Document> prototypes = new HashMap<>();
+
+  void register(String key, Document proto) { prototypes.put(key, proto); }
+
+  Document create(String key) {
+    Document proto = prototypes.get(key);
+    if (proto == null) throw new IllegalArgumentException(key);
+    return new Document(proto);       // copy constructor — fresh, independent instance
+  }
+}
+
+// Startup: configure once — the expensive parse happens ONCE.
+registry.register("invoice", loadTemplate("invoice.xml"));
+// Runtime: stamp out copies cheaply.
+Document doc = registry.create("invoice");
+```
+
+This is where Prototype beats the factory patterns: a factory would re-run the expensive
+construction on every call; the registry amortizes it to one parse plus cheap copies.
+
+## Modern Java: records and with-style copies
+
+Immutability changes the game — if nothing is mutable, **sharing is safe and copying is trivial**.
+With records, "copy with one field changed" is a one-line derivation:
+
+```java
+record Order(String id, String status, List<String> lines) {
+  Order withStatus(String s) { return new Order(id, s, lines); }  // components are immutable — share them
+}
+Order shipped = order.withStatus("SHIPPED");   // prototype-style derivation, no clone()
+```
+
+For that to be safe, components must genuinely be immutable — store `List.copyOf(lines)` in the
+canonical constructor so no caller retains a mutable alias.
+
+## When NOT to use it
+
+- **Construction is cheap and stateless** — `new` is clearer; a prototype layer only obscures it.
+- **The object graph is deep and mutable** — a correct deep copy of a tangled graph (cycles,
+  shared sub-objects) is genuinely hard; consider making the type immutable instead, or rebuilding
+  via a Builder.
+- **You need *varied* objects, not near-identical ones** — that is Factory/Builder territory;
+  Prototype shines only when copies start from a meaningful configured baseline.
 
 ## Check yourself
 

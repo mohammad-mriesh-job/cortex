@@ -95,6 +95,28 @@ signal** or a condition that never became true. Same "hung thread" in a dump; op
 opposite fixes. Reach for a thread dump first — the state alone narrows the diagnosis by half.
 :::
 
+## Drill the six states
+
+Interviewers ask these cold — "what state is a thread in when...?" — so drill entry and exit for
+each state until it is reflex.
+
+```flashcards
+title: 'Thread states: how you get in, how you get out'
+cards:
+  - front: '`NEW` — how in, how out?'
+    back: 'In: `new Thread(r)` — constructed, not started. Out: `start()` → `RUNNABLE`. Calling `start()` a second time throws `IllegalThreadStateException`.'
+  - front: '`RUNNABLE` — what does it actually cover?'
+    back: 'Both **running** and **ready-to-run** — the JVM does not distinguish. Threads blocked in native I/O (socket read) also show `RUNNABLE`. It is the hub: every live transition passes back through it.'
+  - front: '`BLOCKED` — how in, how out?'
+    back: 'In: trying to enter a `synchronized` block/method whose **monitor** another thread holds (including re-entering after `wait()` is signaled). Out: the monitor is acquired → `RUNNABLE`. Only monitors cause `BLOCKED` — `ReentrantLock.lock()` parks as `WAITING` instead.'
+  - front: '`WAITING` — how in, how out?'
+    back: 'In: `wait()`, `join()`, `LockSupport.park()`. Out: `notify()`/`notifyAll()`, the joined thread terminates, or `unpark()` → back to `RUNNABLE` (via `BLOCKED` if the monitor must be re-acquired).'
+  - front: '`TIMED_WAITING` — how in, how out?'
+    back: 'In: `sleep(t)`, `wait(t)`, `join(t)`, `parkNanos`/`parkUntil`. Out: the timeout elapses **or** an early signal/`unpark()` — whichever comes first.'
+  - front: '`TERMINATED` — how in, how out?'
+    back: 'In: `run()` returns normally or throws. Out: never — a `Thread` object cannot be restarted; create a new one.'
+```
+
 ## Check yourself
 
 ```quiz

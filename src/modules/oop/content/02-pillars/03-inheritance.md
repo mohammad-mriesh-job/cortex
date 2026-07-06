@@ -136,13 +136,11 @@ or state to inherit.
 
 ```mermaid
 flowchart TB
-    A["A: greet()"] --> B["B: greet()"]
-    A --> C["C: greet()"]
-    B --> D["D extends B, C ?"]
+    A["A: greet()"] --> B["B overrides greet()"]
+    A --> C["C overrides greet()"]
+    B --> D["D extends B, C — forbidden"]
     C --> D
     D -.->|"which greet()?"| A
-    classDef bad fill:#fdd,stroke:#c33;
-    class D bad;
 ```
 
 :::gotcha
@@ -150,6 +148,23 @@ Interfaces sidestep the diamond: they carried no state historically, and when tw
 give conflicting `default` methods, Java **forces you to override** and pick explicitly with
 `InterfaceName.super.method()`. No silent ambiguity.
 :::
+
+## Lessons from the JDK's own mistakes
+
+The JDK contains the best-known inheritance blunders, and interviewers cite them:
+
+- `Stack extends Vector` — a stack *is not* a vector, so every `Stack` exposes `insertElementAt`,
+  letting callers corrupt the LIFO invariant. The fix shipped later as composition: "use
+  `ArrayDeque` instead".
+- `Properties extends Hashtable` — inheriting `put(Object, Object)` lets you insert non-string
+  keys into what is documented as a string-to-string map; the class needs its own `setProperty`
+  to stay safe.
+
+Both are is-a claims that were really *implemented-in-terms-of* — exactly the situation
+composition handles cleanly. Modern Java gives you tools to keep hierarchies honest: mark classes
+**`final`** unless designed for extension (Effective Java: *"design and document for inheritance
+or else prohibit it"*), or use **`sealed`** classes (Java 17) to enumerate the permitted
+subclasses so the hierarchy is closed and exhaustively checkable in `switch` patterns.
 
 ## Check yourself
 

@@ -24,10 +24,6 @@ flowchart TD
     P -->|"replication stream"| R1["Replica 1"]
     P -->|"replication stream"| R2["Replica 2"]
     P -->|"replication stream"| R3["Replica 3"]
-    style P fill:#f8981d,color:#000
-    style R1 fill:#d5f5e3,color:#000
-    style R2 fill:#d5f5e3,color:#000
-    style R3 fill:#d5f5e3,color:#000
 ```
 
 :::key

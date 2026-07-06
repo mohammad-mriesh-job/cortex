@@ -19,14 +19,14 @@ flowchart TD
   P["Prompt: 'Design X'"] --> HLD
   subgraph HLD["High-Level Design — the WHAT"]
     direction LR
-    A[Boxes & arrows] --> B[LB, cache, DB, queue]
-    B --> C[Data flow & APIs]
-    C --> D[Scaling & trade-offs]
+    A["Boxes & arrows"] --> B["LB, cache, DB, queue"]
+    B --> C["Data flow & APIs"]
+    C --> D["Scaling & trade-offs"]
   end
   HLD --> LLD
   subgraph LLD["Low-Level Design — the HOW"]
     direction LR
-    E[Classes & interfaces] --> F[Schemas & methods]
+    E["Classes & interfaces"] --> F["Schemas & methods"]
     F --> G[Design patterns]
   end
 ```

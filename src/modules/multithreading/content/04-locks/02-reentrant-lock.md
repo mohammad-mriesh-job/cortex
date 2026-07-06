@@ -123,11 +123,35 @@ lock.tryLock();             // non-blocking: grab it now or return false immedia
 `tryLock` is the standard tool for **deadlock avoidance**: instead of blocking on a second lock you may
 never get, try it, and if it fails, release what you hold and retry.
 
+## Under the hood: AQS in one diagram
+
+`ReentrantLock` (like `Semaphore`, `CountDownLatch`, and most of `java.util.concurrent`) is built on
+**AbstractQueuedSynchronizer (AQS)**: an atomic `int state` (the hold count here) plus a FIFO queue
+of parked waiter threads. `lock()` is conceptually this flow:
+
+```mermaid
+flowchart TD
+  A["lock()"] --> B{"CAS state 0 to 1 succeeds?"}
+  B -->|yes| C["set owner = me, enter critical section"]
+  B -->|no| D{"owner already me?"}
+  D -->|yes| E["reentrant: state++ and proceed"]
+  D -->|no| F["append node to FIFO wait queue"]
+  F --> G["LockSupport.park() — thread sleeps as WAITING"]
+  H["owner unlock(): state to 0, unpark queue head"] --> G
+  G --> B
+```
+
+Two details worth saying in an interview: the fast path is **one CAS, no queue, no kernel call** —
+that is why an uncontended `ReentrantLock` costs nanoseconds; and parked waiters show up in thread
+dumps as `WAITING (parking)`, not `BLOCKED` — only intrinsic monitors produce `BLOCKED`.
+
 ## Fairness
 
 `new ReentrantLock(true)` builds a **fair** lock that grants acquisition in arrival order, preventing
 starvation. `new ReentrantLock()` (the default) is **unfair**: an arriving thread may *barge* ahead of
-longer waiters. Unfair is the default for a reason — it has far higher throughput.
+longer waiters — in AQS terms, a new arrival tries the CAS *before* checking whether the queue is
+empty. A fair lock checks the queue first, which is exactly what makes it slower. Unfair is the
+default for a reason — it has far higher throughput.
 
 :::gotcha
 **Forget `unlock()` in a `finally` and you create a permanent lock.** If the critical section throws,

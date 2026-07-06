@@ -213,6 +213,228 @@ Fixed window is the simplest (one counter) but leaks at the edges; sliding windo
 Gateway = north-south edge (thin, cross-cutting). Mesh = east-west internal (sidecars). BFF = a per-client gateway when needs diverge.
 :::`,
   },
+  {
+    id: 'sd-comm-leaky-bucket',
+    question: 'How does the leaky-bucket rate-limiting algorithm work, and how is it different from token bucket?',
+    difficulty: 'Easy',
+    category: 'Communication',
+    tags: ['rate-limiting', 'leaky-bucket', 'throttling'],
+    answer: `Model a bucket with a hole in the bottom draining at a **constant rate**. Requests pour in and **queue**; they leak out (get processed) at that fixed rate; if the bucket (the queue) is already full, new requests **overflow and are dropped**. The effect: a bursty arrival pattern is **smoothed into a constant output rate**.
+
+Token bucket is the mirror image — it hands out saved-up tokens, so it **allows bursts** up to capacity (spend them all at once) while capping only the average.
+
+| | Leaky bucket | Token bucket |
+|--|--|--|
+| Output | Constant, smoothed | Bursty up to capacity |
+| Bursts | Forbidden (queue/drop) | Allowed |
+| Best for | A downstream needing **steady** load | User-facing APIs where short bursts are fine |
+
+:::key
+Leaky bucket = constant smooth output, no bursts — shield a downstream that needs a steady feed. Token bucket = average cap but bursts allowed — user-facing APIs where a short spike is harmless. Same average rate, opposite burst behavior.
+:::`,
+  },
+  {
+    id: 'sd-comm-distributed-rate-limit',
+    question: 'How do you build a rate limiter that works across many servers?',
+    difficulty: 'Hard',
+    category: 'Communication',
+    tags: ['rate-limiting', 'distributed', 'redis', 'consistency'],
+    answer: `Per-server in-memory counters fail: a user spread across **N servers** gets **N× the limit**. The counter must be **shared**. The standard build is a central **Redis** holding the counter (or token-bucket state), updated **atomically** — \`INCR\` + \`EXPIRE\`, or a **Lua script** for the token-bucket read-modify-write — so concurrent servers can't race past the limit.
+
+The trade-off: every request now does a Redis round trip (~0.5 ms same-DC) and Redis becomes a hot dependency and potential **SPOF**. Optimizations:
+- **Local buckets + global budget** — each node self-limits against a fraction of the budget and reconciles periodically (approximate, cheap, no per-request round trip).
+- **Sharded limiters** — partition keys across Redis nodes.
+
+:::senior
+You trade **accuracy vs cost**. Exact global limiting needs a synchronous shared counter (latency + a bottleneck); at extreme scale go **approximate** — each node limits against its slice of the budget with periodic reconciliation, accepting slight overshoot. Also decide **fail-open vs fail-closed** for when Redis is unreachable.
+:::`,
+  },
+  {
+    id: 'sd-comm-kafka-partitions',
+    question: 'Explain Kafka partitions, consumer groups, and offsets. How are ordering and parallelism controlled?',
+    difficulty: 'Hard',
+    category: 'Communication',
+    tags: ['kafka', 'partitions', 'consumer-groups', 'offsets'],
+    answer: `A Kafka topic is split into **partitions**, each an ordered, append-only log. Ordering is guaranteed **only within a partition**, and the **partition key** decides placement (same key → same partition → ordered). **Parallelism equals partition count**: inside a **consumer group** each partition is consumed by exactly **one** consumer, so the max number of consumers doing useful work = the partition count. Each consumer tracks its **offset** per partition, committed so it can resume or replay. Different consumer groups read the same topic independently — that's fan-out.
+
+\`\`\`text
+Topic T, 3 partitions            Consumer group "billing"
+  P0  ───────────────────────►   consumer 1  (owns P0)
+  P1  ───────────────────────►   consumer 2  (owns P1)
+  P2  ───────────────────────►   consumer 3  (owns P2)
+  A 4th consumer would sit idle — never more than one per partition.
+\`\`\`
+
+:::senior
+Partition count is a key early decision: too few caps parallelism, too many adds overhead and rebalance pain — and you can't easily **reduce** it later. Order-sensitive data (one user's events) must share a partition key. That's the core tension: **global ordering means one partition, i.e. no parallelism.**
+:::`,
+  },
+  {
+    id: 'sd-comm-dlq',
+    question: 'What is a dead-letter queue and why do you need one?',
+    difficulty: 'Easy',
+    category: 'Communication',
+    tags: ['dead-letter-queue', 'poison-message', 'reliability'],
+    answer: `A **dead-letter queue (DLQ)** is a separate queue where messages are routed after they **fail processing repeatedly** (exceed max retries) or can't be delivered. Without one, a **poison message** — malformed, or triggering a consumer bug — is redelivered **forever**, blocking the queue behind it (**head-of-line blocking**) in an infinite retry loop.
+
+Routing it to the DLQ after **N attempts** lets the rest of the queue keep flowing while you inspect, fix, and replay the failures out-of-band. Both **SQS** and **RabbitMQ** support DLQs natively.
+
+:::gotcha
+A DLQ is not fire-and-forget: **alert on DLQ depth** and build a reprocessing path, or failures pile up silently and you notice days later. And always **cap retries before DLQ-ing** — a transient blip deserves a few retries, but a genuinely bad message must not loop forever.
+:::`,
+  },
+  {
+    id: 'sd-comm-webhooks',
+    question: 'How do webhooks work, and how do you make them reliable and secure?',
+    difficulty: 'Medium',
+    category: 'Communication',
+    tags: ['webhooks', 'callbacks', 'reliability', 'security'],
+    answer: `A webhook is a **reverse API call**: instead of you polling the provider, the provider **POSTs an event** to a URL you registered whenever something happens (\`payment_succeeded\` from **Stripe**, a push from **GitHub**). It's real-time and far cheaper than polling.
+
+**Reliability** — your endpoint may be down, so providers **retry with backoff** and delivery is **at-least-once**; the handler must be **idempotent** (dedupe on the event id).
+
+**Security** — the payload is **signed** (HMAC with a shared secret) so you can verify authenticity and integrity; serve the endpoint over **HTTPS**; check the timestamp to block **replay** attacks.
+
+:::senior
+Treat a webhook handler like any at-least-once consumer: **return 2xx fast** (ack, then process async), **dedupe by event id**, and **verify the signature** before trusting anything. For guaranteed delivery, providers also expose an events-list API so you can **reconcile** webhooks you missed.
+:::`,
+  },
+  {
+    id: 'sd-comm-gateway-vs-proxy-vs-lb',
+    question: 'API gateway vs reverse proxy vs load balancer — how do they differ?',
+    difficulty: 'Medium',
+    category: 'Communication',
+    tags: ['api-gateway', 'reverse-proxy', 'load-balancer'],
+    answer: `They overlap — all three are reverse proxies — but sit at different levels of concern.
+
+| Layer | Job | Examples |
+|--|--|--|
+| **Load balancer** | Spread connections/requests across **identical** backend instances for scale + availability (health checks, algorithms); L4 or L7 | NGINX, HAProxy, AWS ELB/ALB |
+| **Reverse proxy** | Generic front door for backends: TLS termination, caching, compression, routing | NGINX, Envoy |
+| **API gateway** | Application-aware proxy for microservices adding **API concerns**: auth, rate limiting, routing/aggregation, versioning, per-route policy | Kong, AWS API Gateway |
+
+A gateway usually **includes** load balancing; a plain LB does not do auth or aggregation.
+
+:::key
+LB = spread load across clones (availability/scale). Reverse proxy = generic front door (TLS, cache, route). API gateway = LB/proxy **plus** API concerns (auth, rate-limit, aggregation) for services. Keep the gateway **thin** — no business logic.
+:::`,
+  },
+  {
+    id: 'sd-comm-graphql-tradeoffs',
+    question: 'What are the hard problems with GraphQL in production?',
+    difficulty: 'Medium',
+    category: 'Communication',
+    tags: ['graphql', 'n-plus-1', 'dataloader', 'caching'],
+    answer: `GraphQL lets a client fetch **exactly the fields it wants** from a single endpoint — no over- or under-fetching — which is great for mobile and rich UIs. The hard parts in production:
+
+1. **N+1 query problem** — a nested query (\`users → their posts\`) naively fires one DB query per parent. Solved with **DataLoader** batching + per-request caching.
+2. **Caching is hard** — everything is a \`POST\` to one URL, so you lose free **HTTP/CDN caching by URL**; you need persisted queries or app-level caching.
+3. **Expensive/malicious queries** — a deeply nested query can DoS you; enforce **query depth/complexity limits**, cost analysis, and timeouts.
+4. **Rate limiting** is harder — you must price per **query cost**, not per endpoint.
+
+:::senior
+GraphQL **moves complexity from client to server**: you now own batching (DataLoader), caching, and query-cost governance. It shines when many clients need different shapes of data; for a simple public API, REST's free HTTP caching and simplicity usually win.
+:::`,
+  },
+  {
+    id: 'sd-comm-protobuf',
+    question: 'Why is Protobuf faster and smaller than JSON, and what\'s the cost?',
+    difficulty: 'Medium',
+    category: 'Communication',
+    tags: ['protobuf', 'serialization', 'grpc', 'binary'],
+    answer: `**Protobuf** is a binary, schema-defined serialization format (the default for **gRPC**). It's smaller and faster than JSON because:
+- fields are tagged by **integer numbers**, not string keys — the field names never travel on the wire;
+- values are **binary-packed** (varints), not text;
+- there's no quote/whitespace parsing.
+
+It needs a shared \`.proto\` schema compiled to code, which buys you **strong typing and validation** for free. The costs: it's **not human-readable** (you can't just \`curl\` and eyeball it), you **need the schema** to decode, and you must keep schema-evolution discipline.
+
+:::senior
+Schema evolution is the discipline: **never reuse or renumber a field tag**, only **add new optional fields**, so old and new peers stay compatible. Use Protobuf/gRPC for high-throughput **internal** service-to-service calls; keep **JSON/REST at the public edge** for debuggability and universal client support.
+:::`,
+  },
+  {
+    id: 'sd-comm-realtime-scaling',
+    question: 'How do you scale a real-time system to millions of concurrent WebSocket connections?',
+    difficulty: 'Hard',
+    category: 'Communication',
+    tags: ['websocket', 'scaling', 'pub-sub', 'fan-out'],
+    answer: `WebSockets are **stateful** — each connection pins memory and a file descriptor to **one** server (a tuned box holds ~tens of thousands up to ~1M). You scale horizontally:
+
+1. **Connection/gateway fleet** — many servers, each holding a slice of connections, fronted by an LB with **sticky routing** (a live connection can't hop servers mid-session).
+2. **Pub/sub backplane** (**Redis** pub/sub, **Kafka**, **NATS**) — so a server can deliver to a user connected to **another** server: publish to a channel, the owning server pushes it down the right socket.
+3. **Session registry** (user → server) for direct routing; **offline** users fall back to a **push notification** (APNs/FCM).
+
+:::senior
+The crux: connection state is **sharded across servers**, so delivery becomes a **fan-out/routing** problem solved by a shared pub/sub layer. Also plan for **reconnect storms** — a deploy or crash triggers a thundering herd, so add **backoff + jitter** on reconnect and use connection draining on shutdown.
+:::`,
+  },
+  {
+    id: 'sd-comm-message-ordering',
+    question: 'How do you guarantee message ordering in a distributed queue, and why is global ordering expensive?',
+    difficulty: 'Medium',
+    category: 'Communication',
+    tags: ['ordering', 'partitioning', 'sequence-numbers'],
+    answer: `Ordering is only cheap **within a single partition/queue** consumed by one worker. To keep related messages ordered, route them to the same partition via a **partition key** (all events for one user or account) — Kafka then guarantees **per-partition order**.
+
+**Global total order** across all messages requires either a **single partition + single consumer** (zero parallelism) or a **global sequencer** — both cap throughput and create a bottleneck. Alternatively, consumers can **reorder** using **sequence numbers** if they buffer and wait for gaps to fill.
+
+:::senior
+The real trade is **order vs parallelism**: partition by the entity that needs ordering (**order-per-key**) and accept no cross-key order. Demanding *global* ordering usually signals a modeling problem — scope ordering to the **smallest key** that needs it. And because delivery is at-least-once, handle **duplicates** with idempotency: a naive retry silently breaks ordering.
+:::`,
+  },
+  {
+    id: 'sd-comm-async-request-reply',
+    question: 'How do you get a response back from an asynchronous, queue-based request?',
+    difficulty: 'Medium',
+    category: 'Communication',
+    tags: ['async', 'request-reply', 'correlation-id'],
+    answer: `Use the **async request-reply** pattern. The requester publishes a message stamped with a unique **correlation id** and a **reply-to** address (a response queue/topic), then either waits or registers a callback. The worker processes it and publishes the result to that reply queue **tagged with the same correlation id**; the requester matches reply → request by that id.
+
+Alternatives for user-facing flows:
+- **Poll** — return \`202 Accepted\` + a job URL, client polls \`GET /jobs/{id}\` for status.
+- **Push** — deliver the result over a **WebSocket** or **webhook** when it's ready.
+
+:::gotcha
+Plan for the reply that **never arrives** (worker crash): set a **timeout** with retry/fallback, and make processing **idempotent** because the reply itself may be lost and retried. Don't block a request thread waiting on a slow reply — prefer **202 + poll/push** for anything user-facing.
+:::`,
+  },
+  {
+    id: 'sd-comm-event-sourcing',
+    question: 'What is event sourcing, and what are its benefits and costs?',
+    difficulty: 'Hard',
+    category: 'Communication',
+    tags: ['event-sourcing', 'cqrs', 'audit-log'],
+    answer: `Instead of storing current state and overwriting it, **event sourcing** stores the immutable, append-only **sequence of events** that produced the state; current state is a **fold (replay)** over those events.
+
+**Benefits:**
+- a perfect **audit log** / full history;
+- **time travel** — reconstruct any past state;
+- easy new **read models** by replaying the log (pairs naturally with **CQRS**); a natural fit for **Kafka**.
+
+**Costs:**
+- reading current state needs a **replay**, so you keep **snapshots** + materialized read views;
+- **schema/versioning** of old events is hard (they're immutable forever);
+- **eventual consistency** between the log and the read models.
+
+:::senior
+Powerful where you genuinely need **auditability and temporal queries** (finance, ledgers), but it's a big complexity jump — the append-only log is the source of truth and **every query needs a projection**. Don't event-source the whole system; apply it to the one aggregate that truly needs the history.
+:::`,
+  },
+  {
+    id: 'sd-comm-rate-limit-headers',
+    question: 'How should a server tell a client it\'s being rate-limited, and how should the client react?',
+    difficulty: 'Easy',
+    category: 'Communication',
+    tags: ['rate-limiting', 'http', '429', 'retry-after'],
+    answer: `Return **HTTP 429 Too Many Requests**, ideally with a **\`Retry-After\`** header (seconds, or an HTTP date) telling the client exactly when to try again, plus \`X-RateLimit-Limit\` / \`-Remaining\` / \`-Reset\` so well-behaved clients can **self-pace** before they ever hit the wall.
+
+The client should **back off**: honor \`Retry-After\`, and otherwise use **exponential backoff with jitter** — never immediately re-fire, which only amplifies the overload.
+
+:::gotcha
+Distinguish **429** (you exceeded *your* rate limit — slow down and retry later) from **503** (the *server* is overloaded / shedding load). Both are retryable, but 429 is **per-client throttling**. A client that retries a 429 **instantly with no backoff** turns rate limiting into a self-inflicted **retry storm** — exactly what the limit was meant to prevent.
+:::`,
+  },
 ];
 
 export default questions;

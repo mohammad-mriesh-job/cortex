@@ -130,6 +130,32 @@ happens-before is a **partial order**, not wall-clock time: it constrains *visib
 not which thread physically ran first.
 :::
 
+## Drill the happens-before rules
+
+These rules *are* the JMM as far as interviews go — recite them, then apply them to any "will T2
+see it?" puzzle.
+
+```flashcards
+title: The happens-before rules
+cards:
+  - front: 'Program order rule'
+    back: 'Each action in a thread happens-before every later action **in that same thread**. Within one thread, execution always *appears* in program order (as-if-serial).'
+  - front: 'Monitor lock rule'
+    back: 'An **unlock** of a monitor happens-before every subsequent **lock** of that *same* monitor. This is why `synchronized` gives you visibility, not just mutual exclusion.'
+  - front: 'Volatile rule'
+    back: 'A **write** to a volatile field happens-before every subsequent **read** of that field.'
+  - front: 'Thread start rule'
+    back: '`t.start()` happens-before every action in `t` — the new thread sees everything the parent set up before starting it.'
+  - front: 'Thread join rule'
+    back: 'Every action in `t` happens-before another thread''s `t.join()` returning — after join you see all of the thread''s writes.'
+  - front: 'Interruption rule'
+    back: 'A call to `t.interrupt()` happens-before `t` detecting the interrupt (via thrown `InterruptedException` or a flag check).'
+  - front: 'Transitivity'
+    back: 'A hb B and B hb C ⇒ A hb C. This is why one volatile flag can publish a whole batch of **plain** writes made before it — the "piggybacking" idiom.'
+  - front: 'No rule applies?'
+    back: 'Then there is **no edge** — a data race. Reads may return stale or apparently reordered values, and the JIT may legally hoist them out of loops. "It worked in the test" proves nothing.'
+```
+
 ## Check yourself
 
 ```quiz

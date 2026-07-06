@@ -39,6 +39,22 @@ flowchart LR
 DNS resolution happens **once** and is heavily cached (browser → OS → resolver), so it is not on the hot path for most requests. The load balancer onward is where your design decisions live.
 :::
 
+## Where the milliseconds go
+
+Interviewers love "where does the time go on one request?" — quote a budget, not vibes. For a cache-hit read inside one data center:
+
+| Hop | Typical cost | Notes |
+|--|--|--|
+| DNS lookup | ~0 ms (cached) / 20–120 ms cold | Once per TTL, not per request |
+| TLS handshake | 1 RTT (TLS 1.3) — reused | Connection pooling amortizes it |
+| Client → LB (internet) | 10–100 ms | Dominated by user's distance; a CDN/edge cuts this |
+| LB → app server | ~0.5 ms | Same-DC round trip |
+| App → cache (Redis) | ~0.5–1 ms | 0.5 ms RTT + sub-ms lookup |
+| App → database | 1–10 ms (indexed query) | 10–100x worse if it hits disk or misses an index |
+| App logic + serialization | 1–5 ms | JSON encoding is not free at scale |
+
+Two consequences: the **internet leg dwarfs everything inside the DC**, which is why CDNs and regional deployments matter; and inside the DC, **each extra sequential hop adds ~0.5–1 ms plus a failure point**, which is why chatty microservice chains blow latency budgets. A p99 target of 200 ms leaves room for exactly one slow thing.
+
 ## Full flow as a sequence
 
 Watch the request thread through every component. The cache check is the branch that decides whether the database is touched at all.
@@ -78,12 +94,12 @@ Think of the path as a decision tree — you add each component to solve a speci
 
 ```mermaid
 flowchart TD
-  Q1{More traffic than<br/>one server handles?} -->|yes| LB[Add a Load Balancer<br/>+ more servers]
+  Q1{"More traffic than one server handles?"} -->|yes| LB["Add a Load Balancer + more servers"]
   Q1 -->|no| Single[Single server is fine]
-  LB --> Q2{Same data read<br/>over and over?}
-  Q2 -->|yes| Cache[Add a Cache<br/>cut DB load & latency]
+  LB --> Q2{"Same data read over and over?"}
+  Q2 -->|yes| Cache["Add a Cache — cut DB load and latency"]
   Q2 -->|no| Q3
-  Cache --> Q3{Reads swamping<br/>the database?}
+  Cache --> Q3{"Reads swamping the database?"}
   Q3 -->|yes| Rep[Add read replicas]
   Q3 -->|no| Done[Ship it]
 ```

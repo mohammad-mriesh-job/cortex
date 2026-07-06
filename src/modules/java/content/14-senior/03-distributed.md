@@ -81,6 +81,34 @@ stateDiagram-v2
     HalfOpen --> Open: trial call fails
 ```
 
+## Check yourself
+
+```quiz
+title: Distributed Java
+questions:
+  - q: 'With at-least-once delivery, why must every write be idempotent?'
+    options:
+      - text: 'A client that times out doesn''t know if the write succeeded, so it retries — applying it twice must equal applying it once'
+        correct: true
+      - 'Because the network guarantees exactly-once delivery'
+      - 'To make writes run faster'
+    explain: 'Partial failures force retries. "Exactly-once *delivery*" is essentially impossible; you get exactly-once *processing* by making consumers idempotent (e.g. an idempotency key deduping replays) on top of at-least-once delivery.'
+  - q: 'Why should a database connection pool usually be **small** (often under 20)?'
+    options:
+      - text: 'The DB has limited cores and disks; too many connections increase contention and context-switching'
+        correct: true
+      - 'Large pools use too much client memory'
+      - 'HikariCP hard-caps pools at 20'
+    explain: 'Flooding the database with connections thrashes it. A small pool (roughly `cores × 2 + spindles`) protects the DB and becomes a natural backpressure point — critical with millions of virtual threads, where you must *not* size the pool to the thread count.'
+  - q: 'Historically, what caused a virtual thread to "pin" its carrier thread?'
+    options:
+      - text: 'Blocking inside a `synchronized` block (through JDK 23; JEP 491 in JDK 24 removed it) — and native/FFI calls still pin'
+        correct: true
+      - 'Any call to `Thread.sleep()`'
+      - 'Creating more than 1,000 virtual threads'
+    explain: 'Pinning stops the carrier from running other virtual threads while blocked. On JDK 21–23 the fix was a `ReentrantLock` over `synchronized`; from JDK 24 that is unnecessary, though native/foreign-function calls can still pin. Also watch `ThreadLocal` memory — prefer `ScopedValue`.'
+```
+
 :::key
 At scale, minimize coordination: **share-nothing**, immutable messages, **stateless** services. Assume at-least-once delivery, so make every write **idempotent** with idempotency keys. Prefer **virtual threads** for I/O-bound work (mind pinning), keep **connection pools small** as the backpressure point, and wrap every remote call in **timeouts, jittered retries, circuit breakers, and backpressure**. The network is hostile — design for it.
 :::

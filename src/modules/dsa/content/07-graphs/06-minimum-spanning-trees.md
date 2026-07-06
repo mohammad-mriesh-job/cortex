@@ -47,6 +47,45 @@ for (Edge e : edges) {
 - **Time O(E log E)** — dominated by the sort.
 - Naturally handles a graph given as an **edge list**; great for **sparse** graphs.
 
+## Watch it: Kruskal accepts and rejects
+
+Four vertices A–D; the sorted edge list is the array below. Watch union-find accept the safe
+edges and reject the two that would close a cycle.
+
+```walkthrough
+title: Kruskal on edges AB=1, CD=2, BC=3, AC=4, BD=5
+code: |
+  edges.sort(byWeight);
+  DSU dsu = new DSU(V);
+  int total = 0, used = 0;
+  for (Edge e : edges) {
+    if (dsu.union(e.u, e.v)) {   // false -> would form a cycle
+      total += e.weight;
+      if (++used == V - 1) break;
+    }
+  }
+steps:
+  - text: 'Every vertex starts alone: {A} {B} {C} {D}. Take `AB (1)`: A and B are in different components → **accept**. Components: {A,B} {C} {D}. total = 1.'
+    array: ['AB:1', 'CD:2', 'BC:3', 'AC:4', 'BD:5']
+    highlight: [0]
+    line: 5
+  - text: '`CD (2)`: C and D differ → **accept**. Components: {A,B} {C,D}. total = 3. Two edges used; a spanning tree needs V − 1 = 3.'
+    array: ['AB:1', 'CD:2', 'BC:3', 'AC:4', 'BD:5']
+    sorted: [0]
+    highlight: [1]
+    line: 5
+  - text: '`BC (3)`: B lives in {A,B}, C in {C,D} — different → **accept**, merging everything into {A,B,C,D}. total = 6, used = 3 = V − 1 → stop early.'
+    array: ['AB:1', 'CD:2', 'BC:3', 'AC:4', 'BD:5']
+    sorted: [0, 1]
+    highlight: [2]
+    line: 7
+  - text: 'Had we continued: `AC (4)` and `BD (5)` both connect vertices already in the same component — union returns false, meaning a **cycle** — rejected. MST = {AB, CD, BC}, weight 6.'
+    array: ['AB:1', 'CD:2', 'BC:3', 'AC:4', 'BD:5']
+    sorted: [0, 1, 2]
+    highlight: [3, 4]
+    line: 5
+```
+
 ## Prim — grow one tree
 
 Start from any vertex and repeatedly pull the **cheapest edge leaving the tree** into it, using a min-heap keyed on edge weight.
@@ -70,6 +109,14 @@ while (!pq.isEmpty()) {
 - **Time O(E log V)** with a binary heap; O(E + V log V) with a Fibonacci heap.
 - Works from an **adjacency list**; often preferred on **dense** graphs.
 
+:::gotcha
+Two silent failures. In Prim, forgetting the `if (inTree[u]) continue;` line breaks the
+algorithm: the heap holds **stale duplicate entries** for vertices reached by several edges, and
+without the skip you count a vertex's weight twice. In Kruskal, a **disconnected graph** simply
+ends with `used < V - 1` — no error, just a wrong "MST". Check the edge count at the end and
+report "no spanning tree exists" if it falls short.
+:::
+
 ## Which to reach for
 
 | | Kruskal | Prim |
@@ -83,6 +130,23 @@ while (!pq.isEmpty()) {
 :::senior
 Both are greedy and both are correct by the cut property — interviewers love asking *why* greedy is safe here (it isn't for, say, shortest paths with negative edges). Also know the boundary: MST minimizes **total** weight, **not** path lengths between pairs — for that you want Dijkstra/Bellman-Ford. And on a graph with equal edge weights, any BFS tree is already minimal.
 :::
+
+## Recall
+
+```flashcards
+title: MST essentials
+cards:
+  - front: 'How many edges does a spanning tree of V vertices have?'
+    back: 'Exactly **V − 1** — one fewer than the vertex count, and no cycles.'
+  - front: 'Kruskal: mechanism and time'
+    back: '**Sort edges + union-find** to reject cycle-forming edges. **O(E log E)**, best for sparse graphs / edge lists.'
+  - front: 'Prim: mechanism and time'
+    back: '**Grow one tree** by pulling the cheapest exit edge from a min-heap. **O(E log V)**, at home on adjacency lists / dense graphs.'
+  - front: 'The cut property'
+    back: 'The **minimum-weight edge crossing any cut** belongs to some MST — the theorem that licenses both greedy algorithms.'
+  - front: 'Does the MST minimize the path between two vertices?'
+    back: '**No** — it minimizes *total* weight. Pairwise shortest paths need Dijkstra / Bellman-Ford.'
+```
 
 ## Check yourself
 

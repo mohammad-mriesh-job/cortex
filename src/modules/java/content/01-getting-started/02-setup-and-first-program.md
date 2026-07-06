@@ -76,7 +76,16 @@ Change either of these — rename `main` or make it `private` — and the progra
 
 ## Compile, then run
 
-Java is a two-step language: **compile** source to bytecode, then **run** the bytecode.
+Java is a two-step language: **compile** source to bytecode, then **run** the bytecode. Each step can fail differently — `javac` catches **compile-time errors** (typos, type mismatches) before anything runs; exceptions at `java` time are **runtime errors**:
+
+```mermaid
+flowchart LR
+    A["Edit HelloWorld.java"] --> B["javac HelloWorld.java"]
+    B -->|"compile error"| A
+    B -->|"produces HelloWorld.class"| C["java HelloWorld"]
+    C -->|"exception or wrong output"| A
+    C -->|"success"| D["Hello, World!"]
+```
 
 ```bash
 javac HelloWorld.java   # produces HelloWorld.class (bytecode)
@@ -113,6 +122,39 @@ Fix: rename the file (or the class) so they match, character-for-character inclu
 :::senior
 Modern Java is trimming this ceremony. The simplified `main` finalized in **Java 25** lets you write just `void main()` (even printing via `IO.println(...)`), with no class wrapper required for a single file. The classic `public static void main(String[] args)` still works everywhere and is what you'll see in virtually all existing code — learn it first, enjoy the shortcut later.
 :::
+
+```quiz
+title: Check yourself
+questions:
+  - q: '`javac Greet.java` succeeded. Which command runs the bytecode you just produced?'
+    options:
+      - '`java Greet.class`'
+      - text: '`java Greet`'
+        correct: true
+      - '`javac Greet`'
+    explain: 'The argument to `java` is a **class name**, not a file name. `java Greet.class` makes the JVM hunt for a class literally named `class` in a package `Greet` — hence "Could not find or load main class".'
+  - q: 'The file `app.java` contains `public class App { ... }`. What happens when you compile it?'
+    options:
+      - 'It compiles — file names are just a convention'
+      - text: 'Compile error — a public class must live in a file with exactly the same name'
+        correct: true
+      - 'It compiles but fails at runtime'
+    explain: 'The compiler enforces `public class App` ⇒ `App.java`, matching case exactly. Rename the file or the class.'
+  - q: 'Why must the classic `main` method be `static`?'
+    options:
+      - 'Static methods execute faster than instance methods'
+      - text: 'So the JVM can call it without first constructing an object of your class'
+        correct: true
+      - 'Because `void` methods are required to be static'
+    explain: 'At launch there are no objects yet — and the JVM has no idea how to construct one (which constructor? what arguments?). A static method belongs to the class itself, so it is callable immediately. (Java 25''s instance-main feature works precisely because the JVM now agrees to call your no-arg constructor first.)'
+  - q: 'You run `java App one two`. What is `args[0]` inside `main`?'
+    options:
+      - '`"App"` — the program name, like C''s `argv[0]`'
+      - text: '`"one"` — Java''s args array holds only the arguments'
+        correct: true
+      - '`"java"`'
+    explain: 'Unlike C, the program name is **not** included. `args` is `["one", "two"]`, so `args.length` is 2 and `args[0]` is `"one"`.'
+```
 
 ## What's next
 

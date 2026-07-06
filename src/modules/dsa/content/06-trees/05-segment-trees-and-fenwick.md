@@ -38,13 +38,70 @@ int prefix(int i) {                       // sum of a[1..i]
 int range(int l, int r) { return prefix(r) - prefix(l - 1); }
 ```
 
+## Watch it: a Fenwick query climbs by lowbit
+
+For `a = [3, 1, 4, 1, 5, 9]` the BIT stores block sums: `bit[6]` covers `a[5..6]`, `bit[4]`
+covers `a[1..4]` (each block's size is the index's lowest set bit). Query `prefix(6)` and count
+the reads.
+
+```walkthrough
+title: prefix(6) on the BIT of [3, 1, 4, 1, 5, 9]
+code: |
+  int prefix(int i) {          // sum of a[1..i]
+    int s = 0;
+    for (; i > 0; i -= i & -i)
+      s += bit[i];             // add this block, strip the lowbit
+    return s;
+  }
+steps:
+  - text: 'The BIT array (slot 0 unused — Fenwick is 1-indexed). Each slot holds the sum of the block ending there: `bit[6] = a[5]+a[6] = 14`, `bit[4] = a[1..4] = 9`. Start the query with `i = 6`.'
+    array: [0, 3, 4, 4, 9, 5, 14]
+    pointers: { 6: 'i' }
+    line: 2
+  - text: 'i = 6 (binary 110, lowbit 2): add `bit[6] = 14` — that block covers a[5..6]. s = 14. Strip the lowbit: i = 6 − 2 = 4.'
+    array: [0, 3, 4, 4, 9, 5, 14]
+    highlight: [6]
+    pointers: { 6: 'i' }
+    line: 4
+  - text: 'i = 4 (binary 100, lowbit 4): add `bit[4] = 9` — that block covers a[1..4]. s = 23. Strip: i = 4 − 4 = 0.'
+    array: [0, 3, 4, 4, 9, 5, 14]
+    sorted: [6]
+    highlight: [4]
+    pointers: { 4: 'i' }
+    line: 4
+  - text: 'i = 0 → loop ends. `prefix(6) = 23` in **two array reads** instead of six — one read per set bit of the index. That is the O(log n).'
+    array: [0, 3, 4, 4, 9, 5, 14]
+    sorted: [4, 6]
+    line: 5
+```
+
+:::gotcha
+Fenwick trees are **strictly 1-indexed**. Call `update(0, d)` and the loop `i += i & -i` adds
+zero forever — an infinite loop, because `0 & -0 == 0`. Always shift external 0-based indices up
+by one, and remember `range(l, r) = prefix(r) - prefix(l - 1)` requires `l ≥ 1`.
+:::
+
 :::tip
 The Fenwick tree is the interviewer's favorite for *"count of smaller elements to the right"* / inversion counting: compress values to ranks, then sweep right-to-left doing `prefix(rank - 1)` before `update(rank, 1)`. It's less code and less memory than a segment tree when you only need **prefix** aggregates of an invertible operation (sum, xor).
 :::
 
 ## Segment tree — any associative operation
 
-The segment tree stores each node's aggregate over a contiguous range; a query splits into O(log n) node ranges. It works for **any associative merge** — sum, min, max, gcd — not just invertible ones.
+The segment tree stores each node's aggregate over a contiguous range; a query splits into O(log n) node ranges. It works for **any associative merge** — sum, min, max, gcd — not just invertible ones. For `a = [3, 1, 4, 1]` with sum as the merge:
+
+```mermaid
+flowchart TD
+  R["node 1: sum(0..3) = 9"] --> L["node 2: sum(0..1) = 4"]
+  R --> RT["node 3: sum(2..3) = 5"]
+  L --> L1["leaf: a[0] = 3"]
+  L --> L2["leaf: a[1] = 1"]
+  RT --> R1["leaf: a[2] = 4"]
+  RT --> R2["leaf: a[3] = 1"]
+```
+
+A query like `sum(1..3)` stitches together the fewest covering nodes — here `a[1]` plus
+`node 3` — touching O(log n) nodes instead of every leaf. A point update walks one root-to-leaf
+path and refreshes the aggregates on the way back up.
 
 ```java
 int[] tree; int n;                        // size 4n

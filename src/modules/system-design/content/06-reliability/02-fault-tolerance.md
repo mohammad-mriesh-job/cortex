@@ -99,14 +99,14 @@ Named after a ship's watertight compartments: if one floods, the others keep the
 ```mermaid
 flowchart LR
   subgraph NoBulkhead["Without bulkhead — shared pool"]
-    P1["Shared thread pool<br/>(50 threads)"] --> DA1[Dependency A ✅]
-    P1 --> DB1["Dependency B 🐢 slow<br/>consumes ALL 50 threads"]
-    P1 -.starved.-> DC1[Dependency C ❌ blocked]
+    P1["Shared thread pool (50 threads)"] -->|healthy| DA1[Dependency A]
+    P1 -->|"slow — consumes ALL 50 threads"| DB1[Dependency B]
+    P1 -.->|starved, blocked| DC1[Dependency C]
   end
   subgraph WithBulkhead["With bulkhead — isolated pools"]
-    PA["Pool A (20)"] --> DA2[Dependency A ✅]
-    PB["Pool B (20)"] --> DB2["Dependency B 🐢<br/>only its 20 threads block"]
-    PC["Pool C (10)"] --> DC2[Dependency C ✅ unaffected]
+    PA["Pool A (20)"] -->|healthy| DA2[Dependency A]
+    PB["Pool B (20)"] -->|"slow — only its 20 threads block"| DB2[Dependency B]
+    PC["Pool C (10)"] -->|unaffected| DC2[Dependency C]
   end
 ```
 

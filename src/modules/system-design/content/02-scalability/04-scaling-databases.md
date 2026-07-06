@@ -16,19 +16,17 @@ because data has to stay consistent. Three moves, roughly in order of when you r
 
 ```mermaid
 flowchart TD
-  App[App Servers] --> P[("Primary<br/>writes")]
-  App --> R1[("Read Replica")]
-  App --> R2[("Read Replica")]
-  P -. async replication .-> R1
-  P -. async replication .-> R2
-  subgraph SH["Sharding — split by key"]
-    S1[("Shard A<br/>users 0-33%")]
-    S2[("Shard B<br/>users 34-66%")]
-    S3[("Shard C<br/>users 67-100%")]
+  App[App Servers] -->|"all writes"| P[(Primary)]
+  App -->|reads| R1[(Read Replica)]
+  App -->|reads| R2[(Read Replica)]
+  P -.->|async replication| R1
+  P -.->|async replication| R2
+  App -->|"hash(userId) picks shard"| SH
+  subgraph SH["Sharding — split rows by key"]
+    S1[("Shard A — users 0-33%")]
+    S2[("Shard B — users 34-66%")]
+    S3[("Shard C — users 67-100%")]
   end
-  App --> S1
-  App --> S2
-  App --> S3
 ```
 
 ## 1. Read replicas — scale reads
@@ -50,6 +48,8 @@ using synchronous/semi-sync replication for those paths (at a latency cost).
 
 Split one logical dataset **horizontally** across independent DBs (shards), each holding a subset
 of rows. Now writes and storage spread across many primaries.
+
+Know the trigger numbers: a single well-tuned Postgres/MySQL primary handles roughly **10–50k simple QPS** and stays operable up to a **few TB** (backups, migrations, and failover get slow beyond that). Sustained write volume beyond one primary's capacity, or a dataset that outgrows one box, is your cue — e.g. 1B users × 5 KB profile = **5 TB**: shard.
 
 | Shard strategy | How | Watch out for |
 |--|--|--|

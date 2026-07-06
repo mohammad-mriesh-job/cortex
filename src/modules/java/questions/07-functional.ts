@@ -257,6 +257,281 @@ List<Integer> safe = nums.parallelStream().collect(Collectors.toList());
 Lambdas must be **stateless, non-interfering, and associative** (for \`reduce\`). Never run **blocking I/O** on a parallel stream — it borrows the JVM-wide common pool and starves everything else (including \`CompletableFuture\`). Always **measure**: naive \`parallel()\` is often slower than sequential.
 :::`,
   },
+  {
+    id: 'fp-builtin-interfaces',
+    question: 'What are the core functional interfaces in java.util.function?',
+    difficulty: 'Easy',
+    category: 'Streams & Functional',
+    tags: ['functional-interface', 'lambdas', 'java-util-function'],
+    answer: `Four base shapes, plus arity and primitive variants:
+
+| Interface | Shape | Method | Typical use |
+|-----------|-------|--------|-------------|
+| \`Supplier<T>\` | \`() -> T\` | \`get\` | lazy/deferred value |
+| \`Consumer<T>\` | \`T -> void\` | \`accept\` | side effect (\`forEach\`) |
+| \`Function<T,R>\` | \`T -> R\` | \`apply\` | transform (\`map\`) |
+| \`Predicate<T>\` | \`T -> boolean\` | \`test\` | condition (\`filter\`) |
+
+Specializations you'll meet constantly:
+
+- \`UnaryOperator<T>\` = \`Function<T,T>\`; \`BinaryOperator<T>\` = \`BiFunction<T,T,T>\` (used by \`reduce\`).
+- Two-arg forms: \`BiFunction\`, \`BiConsumer\`, \`BiPredicate\`.
+- **Primitive** forms avoid boxing: \`IntFunction\`, \`ToIntFunction\`, \`IntPredicate\`, \`IntUnaryOperator\`, \`IntSupplier\`…
+
+\`\`\`java
+Supplier<UUID> id   = UUID::randomUUID;
+Function<String,Integer> len = String::length;
+Predicate<String> nonBlank   = s -> !s.isBlank();
+\`\`\`
+
+:::tip
+Prefer the standard interfaces over custom ones — every stream/Optional method already speaks them, so your lambdas plug straight in.
+:::`,
+  },
+  {
+    id: 'fp-reduce-vs-collect',
+    question: 'What is the difference between reduce and collect?',
+    difficulty: 'Hard',
+    category: 'Streams & Functional',
+    tags: ['streams', 'reduce', 'collect', 'mutable-reduction'],
+    answer: `Both fold a stream into one result, but they use opposite strategies:
+
+- **\`reduce\`** is an **immutable reduction**: it combines elements with an *associative* function that returns a **new** value each step. Correct only when combining is cheap and side-effect-free.
+- **\`collect\`** is a **mutable reduction**: it accumulates elements **into a mutable container** (\`List\`, \`StringBuilder\`, \`Map\`) using a supplier, accumulator, and combiner — and it parallelizes safely by giving each thread its own container to merge.
+
+The classic mistake is string-joining with \`reduce\`:
+
+\`\`\`java
+// O(n²) — builds a brand-new String on every element:
+String bad = words.stream().reduce("", (a, b) -> a + b);
+// O(n) — accumulates into one StringBuilder:
+String good = words.stream().collect(Collectors.joining());
+\`\`\`
+
+:::gotcha
+Never mutate a shared container from inside \`reduce\` (or \`forEach\`) on a parallel stream — that's a data race. Any time the result is a **collection or buffer**, reach for \`collect\`; use \`reduce\` for scalars like sum, min, or a monoid.
+:::`,
+  },
+  {
+    id: 'fp-primitive-streams',
+    question: 'Why do IntStream / LongStream / DoubleStream exist?',
+    difficulty: 'Medium',
+    category: 'Streams & Functional',
+    tags: ['streams', 'intstream', 'boxing', 'performance'],
+    answer: `They process primitives **without boxing** — a \`Stream<Integer>\` boxes every element into a heap object, while an \`IntStream\` works on raw \`int\`s. They also add numeric terminal ops a \`Stream\` lacks:
+
+\`\`\`java
+int total = orders.stream()
+    .mapToInt(Order::quantity)     // Stream<Order> -> IntStream (no boxing)
+    .sum();                         // sum() only exists on IntStream
+
+IntSummaryStatistics stats =
+    IntStream.rangeClosed(1, 100).summaryStatistics(); // count/min/max/avg/sum in one pass
+\`\`\`
+
+Bridges between the worlds:
+- \`mapToInt\` / \`mapToObj\` / \`boxed()\` convert back and forth.
+- \`IntStream.range(0, n)\` / \`rangeClosed\` replace index loops.
+
+:::gotcha
+\`stream.map(x -> ...).sum()\` won't compile — \`Stream<Integer>\` has no \`sum()\`. Use \`mapToInt\`. And \`average()\` returns an \`OptionalDouble\` (the stream may be empty), not a bare \`double\`.
+:::`,
+  },
+  {
+    id: 'fp-optional-map-flatmap',
+    question: 'How do you create and transform an Optional with map, flatMap, and filter?',
+    difficulty: 'Medium',
+    category: 'Streams & Functional',
+    tags: ['optional', 'map', 'flatmap'],
+    answer: `**Create:** \`Optional.of(x)\` (x must be non-null), \`Optional.ofNullable(x)\` (x may be null), \`Optional.empty()\`.
+
+**Transform** without unwrapping:
+
+\`\`\`java
+Optional<String> city = repo.findUser(id)   // Optional<User>
+    .map(User::address)                      // Optional<Address>  (map wraps)
+    .flatMap(Address::city)                  // city() returns Optional<String>
+    .filter(c -> !c.isBlank());              // keep or empty
+String result = city.orElse("unknown");
+\`\`\`
+
+- **\`map\`** — apply a plain function; the result is auto-wrapped in \`Optional\`.
+- **\`flatMap\`** — use when the function **already returns an \`Optional\`**, to avoid a nested \`Optional<Optional<T>>\`.
+- **\`filter\`** — keep the value only if a predicate holds, else empty.
+
+:::gotcha
+If you \`map\` with a function that itself returns \`Optional\`, you get \`Optional<Optional<X>>\`. That's the exact signal to switch to \`flatMap\` — same rule as \`Stream.map\` vs \`flatMap\`.
+:::`,
+  },
+  {
+    id: 'fp-streams-vs-loops',
+    question: 'When should you use a stream, and when is a plain loop better?',
+    difficulty: 'Medium',
+    category: 'Streams & Functional',
+    tags: ['streams', 'loops', 'readability'],
+    answer: `Streams shine for **declarative data pipelines** — a chain of \`filter\`/\`map\`/\`collect\` that reads like the transformation itself, with easy parallelism. A loop wins when the logic isn't a clean pipeline.
+
+**Prefer a stream when:** you're transforming/filtering/aggregating a collection, composing several steps, or grouping/joining.
+
+**Prefer a loop when:**
+- You mutate external state or need side effects (a stream \`forEach\` that mutates is a smell).
+- You need complex control flow — \`break\` out early on a condition, \`continue\`, or index arithmetic.
+- Hot primitive code where a raw \`for\` avoids lambda/boxing overhead.
+- You need the index, multiple collections in lockstep, or checked-exception handling.
+
+\`\`\`java
+// Pipeline — stream reads better:
+var names = users.stream().filter(User::active).map(User::name).toList();
+// Imperative with early exit — loop reads better:
+for (var u : users) if (u.isAdmin()) return u;
+\`\`\`
+
+:::senior
+It's about clarity, not dogma. A stream that needs \`peek\`, a mutable accumulator, and a comment to explain it should have been a loop. Don't rewrite working loops just to look modern.
+:::`,
+  },
+  {
+    id: 'fp-function-composition',
+    question: 'How do you compose functions, predicates, and consumers?',
+    difficulty: 'Easy',
+    category: 'Streams & Functional',
+    tags: ['function', 'composition', 'andThen', 'predicate'],
+    answer: `The functional interfaces have default methods that build bigger behaviours from small ones:
+
+\`\`\`java
+Function<Integer,Integer> times2 = x -> x * 2;
+Function<Integer,Integer> plus1  = x -> x + 1;
+
+times2.andThen(plus1).apply(5);  // 11  — times2 first, then plus1
+times2.compose(plus1).apply(5);  // 12  — plus1 first, then times2
+\`\`\`
+
+- \`Function\`: \`andThen\` (this → next), \`compose\` (previous → this).
+- \`Predicate\`: \`and\`, \`or\`, \`negate\` — build compound conditions.
+- \`Consumer\`: \`andThen\` — run two side effects in sequence.
+
+\`\`\`java
+Predicate<String> valid = nonBlank.and(s -> s.length() < 100);
+list.removeIf(Predicate.not(valid));   // Predicate.not — Java 11
+\`\`\`
+
+:::tip
+Mnemonic: \`f.andThen(g)\` = \`g(f(x))\` (left to right); \`f.compose(g)\` = \`f(g(x))\` (right to left, like math).
+:::`,
+  },
+  {
+    id: 'fp-collectors-toolbox',
+    question: 'What are the most useful Collectors beyond toList?',
+    difficulty: 'Easy',
+    category: 'Streams & Functional',
+    tags: ['collectors', 'streams', 'toolbox'],
+    answer: `\`Collectors\` is a toolbox of terminal reductions:
+
+| Collector | Produces |
+|-----------|----------|
+| \`toList\` / \`toSet\` / \`toCollection\` | a collection |
+| \`toUnmodifiableList\` | an immutable list |
+| \`toMap(k, v[, merge])\` | a \`Map\` |
+| \`joining(", ", "[", "]")\` | one \`String\` |
+| \`counting\` | \`Long\` count |
+| \`summingInt\` / \`averagingDouble\` | numeric aggregate |
+| \`minBy\` / \`maxBy\` | \`Optional\` extreme |
+| \`groupingBy\` / \`partitioningBy\` | grouped \`Map\` |
+| \`mapping\` / \`filtering\` / \`reducing\` | **downstream** adapters |
+
+\`\`\`java
+String csv = names.stream().collect(Collectors.joining(", "));
+Map<Dept, Long> perDept = emps.stream()
+    .collect(Collectors.groupingBy(Employee::dept, Collectors.counting()));
+\`\`\`
+
+:::tip
+Since Java 16 use \`stream.toList()\` for the common case — it's shorter and returns an **unmodifiable** list (unlike \`collect(toList())\`, whose mutability is unspecified).
+:::`,
+  },
+  {
+    id: 'fp-stream-sources',
+    question: 'What are the different ways to create a Stream, including infinite ones?',
+    difficulty: 'Medium',
+    category: 'Streams & Functional',
+    tags: ['streams', 'sources', 'infinite'],
+    answer: `Streams come from many sources:
+
+\`\`\`java
+list.stream();                         // any Collection
+Stream.of("a", "b", "c");              // explicit elements
+Arrays.stream(array);                  // an array
+IntStream.range(0, 10);                // numeric range
+"a,b,c".lines();  Files.lines(path);   // text (close Files.lines!)
+Stream.ofNullable(maybeNull);          // 0-or-1 element (Java 9)
+\`\`\`
+
+**Infinite** streams need a source generator plus a limiter:
+
+\`\`\`java
+Stream.iterate(1, n -> n * 2).limit(10);              // 1,2,4,... (bounded)
+Stream.iterate(1, n -> n < 100, n -> n * 2);           // 3-arg with predicate (Java 9)
+Stream.generate(Math::random).limit(5);                // stateless supplier
+\`\`\`
+
+- \`iterate\` — each element derived from the previous (sequences).
+- \`generate\` — each element independent (constants, random, polling).
+
+:::gotcha
+An infinite stream **must** be bounded by \`limit\` or \`takeWhile\` (or a short-circuiting terminal like \`findFirst\`) — otherwise the pipeline never terminates.
+:::`,
+  },
+  {
+    id: 'fp-target-typing',
+    question: 'What is the type of a lambda, and how does the compiler decide it?',
+    difficulty: 'Hard',
+    category: 'Streams & Functional',
+    tags: ['lambdas', 'target-typing', 'type-inference'],
+    answer: `A lambda has **no type on its own** — it's a *poly expression* whose type is inferred from the **target type**: the functional interface expected at that position (an assignment, method parameter, return, or cast). The same lambda can become different types in different contexts:
+
+\`\`\`java
+Function<Integer,Integer> f = x -> x + 1;  // target: Function
+UnaryOperator<Integer>    g = x -> x + 1;  // same lambda, different target type
+Comparator<String> byLen = (a, b) -> a.length() - b.length();
+\`\`\`
+
+The lambda's single abstract method must be compatible (parameter count, types, return). Because there's no target type, you **can't** write \`var x = () -> 1;\` — the compiler has nothing to infer against.
+
+:::gotcha
+When two overloads both accept a functional interface, a bare lambda is **ambiguous** — the compiler can't choose a target. Disambiguate with a cast: \`process((Callable<String>) () -> compute())\`. This is why overloading methods on similar functional interfaces is discouraged.
+:::`,
+  },
+  {
+    id: 'fp-checked-exceptions-lambda',
+    question: "Why can't a lambda in a stream throw a checked exception, and how do you handle it?",
+    difficulty: 'Hard',
+    category: 'Streams & Functional',
+    tags: ['lambdas', 'checked-exceptions', 'streams'],
+    answer: `The built-in functional interfaces (\`Function\`, \`Consumer\`, …) declare **no checked exceptions** in their abstract methods, so a lambda body that throws one won't compile inside \`map\`/\`forEach\`:
+
+\`\`\`java
+// Does NOT compile — readString throws IOException:
+paths.stream().map(p -> Files.readString(p));
+\`\`\`
+
+Three practical options:
+
+1. **Handle inside** the lambda — catch and rethrow as unchecked (usually best):
+
+\`\`\`java
+paths.stream().map(p -> {
+    try { return Files.readString(p); }
+    catch (IOException e) { throw new UncheckedIOException(e); }
+});
+\`\`\`
+
+2. **A checked-exception functional interface** you declare yourself, plus a small wrapper that converts it to a standard one.
+3. Move the loop **out of the stream** — a plain \`for\` loop can \`throws IOException\` naturally.
+
+:::senior
+There's no free lunch: a stream must ultimately surface a checked failure as either an unchecked wrapper (\`UncheckedIOException\`) or a collected result type (\`Either\`/\`Result\`). "Sneaky throw" tricks compile but hide the exception from the signature — avoid them in shared code.
+:::`,
+  },
 ];
 
 export default questions;

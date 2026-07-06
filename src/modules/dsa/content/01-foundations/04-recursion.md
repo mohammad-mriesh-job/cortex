@@ -46,7 +46,8 @@ function can't finish `factorial(4)` until every deeper call returns first.
 ## Watch it: factorial(4) as a stack
 
 The array below **is the call stack** — each box is a frame. Watch frames push down as we
-recurse, hit the base case, then pop back up multiplying the returned values.
+recurse and hit the base case; on the way back up, a frame that has returned its value turns
+**settled** (green) while the next one resumes and multiplies.
 
 ```walkthrough
 title: factorial(4) — frames push, then pop with returns
@@ -76,27 +77,27 @@ steps:
     highlight: [3]
     pointers: { 3: 'base' }
     line: 2
-  - text: 'Pop `factorial(1)` = 1. `factorial(2)` resumes: 2 * 1 = **2**. It pops next.'
-    array: [4, 3, 2]
+  - text: '`factorial(1)` returns **1** — its frame settles. `factorial(2)` resumes: 2 * 1 = **2**.'
+    array: [4, 3, 2, 1]
     highlight: [2]
     sorted: [3]
     pointers: { 2: 'top' }
     line: 3
-  - text: 'Pop `factorial(2)` = 2. `factorial(3)` resumes: 3 * 2 = **6**.'
-    array: [4, 3]
+  - text: '`factorial(2)` returns **2** and settles. `factorial(3)` resumes: 3 * 2 = **6**.'
+    array: [4, 3, 2, 1]
     highlight: [1]
     sorted: [2, 3]
     pointers: { 1: 'top' }
     line: 3
-  - text: 'Pop `factorial(3)` = 6. `factorial(4)` resumes: 4 * 6 = **24**.'
-    array: [4]
+  - text: '`factorial(3)` returns **6** and settles. `factorial(4)` resumes: 4 * 6 = **24**.'
+    array: [4, 3, 2, 1]
     highlight: [0]
     sorted: [1, 2, 3]
     pointers: { 0: 'top' }
     line: 3
-  - text: 'Pop `factorial(4)` = **24**. Stack empty, recursion complete. The answer bubbled up as frames unwound.'
-    array: []
-    sorted: []
+  - text: '`factorial(4)` returns **24**. Every frame has settled — the stack is empty again and the answer bubbled up through the unwinding.'
+    array: [4, 3, 2, 1]
+    sorted: [0, 1, 2, 3]
     line: 3
 ```
 
@@ -164,6 +165,13 @@ tabs:
 :::warning
 Java does **not** optimize tail recursion. Deep recursion (say > ~10,000 frames) will throw
 `StackOverflowError`. For deep linear recursion, prefer a loop or an explicit stack.
+:::
+
+:::senior
+A strong answer names the **recurrence** out loud — "T(n) = T(n−1) + O(1), depth n, so O(n) time
+and O(n) stack" — and knows the escape hatch: any recursion can be rewritten iteratively with an
+**explicit `Deque` of frames**. Interviewers probe this the moment the input size (say 10⁶ nodes)
+makes the call stack itself the bug.
 :::
 
 ## Recall

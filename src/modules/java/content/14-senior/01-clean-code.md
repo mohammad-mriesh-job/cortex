@@ -85,6 +85,16 @@ public record Money(long amountMinor, Currency currency) {
 
 A class littered with public setters is usually an anemic data bag whose invariants are enforced — or forgotten — by everyone else.
 
+Validating in the constructor makes an object impossible to observe in an invalid state — every later method can trust its invariants:
+
+```mermaid
+flowchart TD
+    A["new Money(amount, currency)"] --> B{"currency non-null AND amount >= 0?"}
+    B -->|no| C["Throw in the constructor — the object never exists"]
+    B -->|yes| D["Fully built, immutable object"]
+    D --> E["Every method trusts the invariants — no re-checking"]
+```
+
 ## Recognizing code smells
 
 | Smell | What it looks like | Usual fix |
@@ -98,6 +108,34 @@ A class littered with public setters is usually an anemic data bag whose invaria
 :::senior
 Smells are *hypotheses*, not verdicts. The senior skill is knowing when **not** to refactor: code that's ugly but stable, well-tested, and rarely touched is cheaper to leave alone than to "clean." Optimize for the expected cost of future change — churn times difficulty. Refactor aggressively where the file changes weekly; tolerate imperfection where it's effectively frozen.
 :::
+
+## Check yourself
+
+```quiz
+title: Clean code
+questions:
+  - q: 'A constructor does `this.dates = List.copyOf(dates)`. What does that protect against — and what does it miss?'
+    options:
+      - text: 'It stops callers mutating the *list structure*, but not mutations to the *elements* if they are mutable'
+        correct: true
+      - 'It makes the elements immutable too'
+      - 'It protects nothing — `copyOf` returns a live view'
+    explain: '`List.copyOf`/`Map.copyOf`/array `clone()` are **shallow**: they copy the spine, so the caller can''t add or remove, but a shared mutable element can still be changed. True immutability needs immutable element types too.'
+  - q: 'What does Command-Query Separation say a method should do?'
+    options:
+      - text: 'Either *do* something (side effect, returns void) or *answer* something (returns a value, no side effect) — not both'
+        correct: true
+      - 'Always return a value, for testability'
+      - 'Take a boolean flag to choose its behaviour'
+    explain: 'CQS keeps side effects and queries apart so callers can reason about them. A boolean *flag argument* like `render(true)` is a related smell — split it into `renderExpanded()`/`renderCollapsed()`.'
+  - q: 'Why prefer packaging *by feature* (`billing/`, `inventory/`) over *by layer* (`controllers/`, `services/`)?'
+    options:
+      - text: 'A feature change stays local to one package instead of smearing across the whole tree'
+        correct: true
+      - 'It reduces the total number of classes'
+      - 'Layered packages are not allowed in modern Java'
+    explain: 'By-feature packaging maximizes cohesion — changing "billing" touches one package. By-layer scatters every feature across controllers/services/repositories, causing shotgun surgery on each change.'
+```
 
 :::key
 Clean Java optimizes for the *reader* and the *next change*: intention-revealing names, small single-purpose methods, immutability with **deep** defensive copies, minimal accessibility, and objects that enforce their own invariants so they're never seen in an invalid state. Treat code smells as signals to investigate — and know when stability beats tidiness.

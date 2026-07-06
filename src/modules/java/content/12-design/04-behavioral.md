@@ -138,6 +138,34 @@ stateDiagram-v2
 **Strategy and State are structurally identical** — an object delegates to a swappable helper object — but their intent differs. A *Strategy* is chosen once by the client and doesn't change itself (e.g. a sort order). A *State* drives its own transitions and the client usually doesn't know or care which concrete state is active. If the wrapped object decides "what comes next", it's State; if the client decides "how to do this", it's Strategy.
 :::
 
+## Check yourself
+
+```quiz
+title: Behavioral patterns
+questions:
+  - q: 'In modern Java, a Strategy backed by a single-method interface is most naturally expressed as what?'
+    options:
+      - text: 'A lambda or method reference — e.g. a `Comparator` passed to `sort`'
+        correct: true
+      - 'A subclass of an abstract base class'
+      - 'An enum constant'
+    explain: 'A Strategy is a family of interchangeable algorithms behind one interface; when that interface is functional, a lambda *is* the strategy. `Comparator.comparing(...)` is the JDK''s Strategy par excellence.'
+  - q: 'Strategy and State have identical structure. What is the key difference?'
+    options:
+      - text: 'A Strategy is chosen by the client and stays put; a State drives its own transitions'
+        correct: true
+      - 'Strategy uses inheritance, State uses composition'
+      - 'State cannot be implemented with enums'
+    explain: 'Both delegate to a swappable helper. If the wrapped object decides *what comes next* (green → yellow → red), it''s State; if the *client* decides how to do the job (which sort order), it''s Strategy.'
+  - q: 'What is the "lapsed-listener" leak in the Observer pattern?'
+    options:
+      - text: 'A long-lived subject keeps strong references to observers that never unsubscribed, so they are never GC''d'
+        correct: true
+      - 'Observers receive every update twice'
+      - 'The subject forgets to notify its observers'
+    explain: 'If observers do not unsubscribe, the subject''s list pins them in memory for its lifetime. Provide and call `unsubscribe`, or hold observers via `WeakReference`.'
+```
+
 :::key
 Behavioral patterns coordinate objects. **Strategy** swaps algorithms (often a lambda); **Observer** broadcasts changes (prefer `Flow`/listeners over deprecated `Observable`); **Template Method** fixes a skeleton and varies steps; **Iterator** traverses without leaking internals; **Command** turns a request into an object; **State** replaces conditionals with state objects that transition themselves.
 :::
